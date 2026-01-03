@@ -7554,22 +7554,9 @@ Generated on: ${new Date().toLocaleString()}`;
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">
-              User Prompt / Task
-            </label>
-            <Textarea
-              value={outlinePrompt}
-              onChange={(e) => setOutlinePrompt(e.target.value)}
-              placeholder="Paste your user prompt / task here..."
-              className="min-h-[120px] border-amber-200 dark:border-amber-700 focus:border-amber-400"
-              data-testid="textarea-outline-prompt"
-            />
-          </div>
-          
-          <div>
             <div className="flex justify-between items-center mb-2">
               <label className="block text-sm font-semibold text-amber-700 dark:text-amber-300">
-                Input Text (for rewrites, summaries, etc. — optional)
+                Source Document (drag & drop text file here)
               </label>
               <Button
                 variant="ghost"
@@ -7579,7 +7566,7 @@ Generated on: ${new Date().toLocaleString()}`;
                 data-testid="button-upload-outline"
               >
                 <Upload className="w-4 h-4 mr-1" />
-                Upload source text
+                Upload document
               </Button>
               <input
                 id="outline-file-upload"
@@ -7606,7 +7593,7 @@ Generated on: ${new Date().toLocaleString()}`;
               <Textarea
                 value={outlineInputText}
                 onChange={(e) => setOutlineInputText(e.target.value)}
-                placeholder="Optional: paste, drag & drop, or upload source text..."
+                placeholder="Paste or upload your source document here..."
                 className="min-h-[120px] border-amber-200 dark:border-amber-700 focus:border-amber-400"
                 data-testid="textarea-outline-input"
               />
@@ -7616,6 +7603,19 @@ Generated on: ${new Date().toLocaleString()}`;
                 {outlineInputText.length} characters
               </div>
             )}
+          </div>
+          
+          <div>
+            <label className="block text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">
+              Instructions (what to do with the document)
+            </label>
+            <Textarea
+              value={outlinePrompt}
+              onChange={(e) => setOutlinePrompt(e.target.value)}
+              placeholder="e.g., CREATE A STRICT OUTLINE FOR THIS DOCUMENT"
+              className="min-h-[80px] border-amber-200 dark:border-amber-700 focus:border-amber-400"
+              data-testid="textarea-outline-prompt"
+            />
           </div>
           
           <Button
