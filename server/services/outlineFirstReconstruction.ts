@@ -17,6 +17,7 @@ interface OutlineSection {
   id: string;
   title: string;
   keyPoints: string[];
+  subsections: string[];  // Subsection titles within this section
   dependencies: string[];  // Which other sections this depends on
   paragraphRange: { start: number; end: number };  // Which paragraphs this section covers
 }
@@ -90,7 +91,7 @@ async function extractStrictOutline(
     `[P${i}] ${p.substring(0, 80).replace(/\n/g, ' ')}...`
   ).join('\n');
   
-  const prompt = `You are analyzing a document to extract its strict structural outline.
+  const prompt = `You are analyzing a document to extract its strict structural outline for a FORMAL ACADEMIC DOCUMENT.
 
 THE DOCUMENT HAS ${paragraphs.length} PARAGRAPHS TOTAL.
 ${paragraphs.length > maxParagraphsToShow ? `(Showing first ${maxParagraphsToShow} paragraph previews)` : ''}
@@ -101,25 +102,65 @@ ${paragraphSummary}
 DOCUMENT CONTENT:
 ${documentPreview}
 
-TASK: Extract a detailed structural outline that will guide section-by-section reconstruction.
-You MUST assign paragraph ranges to each section.
+TASK: Extract a detailed structural outline for a COMPLETE ACADEMIC DOCUMENT.
+The output MUST follow this MANDATORY STRUCTURE:
+
+1. ABSTRACT - Brief summary of the entire work (200-400 words)
+2. INTRODUCTION - Context, problem statement, thesis, and roadmap
+3. LITERATURE REVIEW - Survey of relevant prior work and scholarship
+4. SUBSTANTIVE CHAPTERS (3-7 chapters depending on document length) - The main content
+5. CONCLUSION - Summary of findings, implications, and future directions
+
+Each chapter MUST have 2-4 internal subsections with clear headings.
 
 Return a JSON object with this EXACT structure:
 {
   "thesis": "Central claim or purpose in one sentence",
   "sections": [
     {
-      "id": "section_1",
-      "title": "Section title",
-      "keyPoints": ["Main point 1", "Main point 2"],
+      "id": "abstract",
+      "title": "Abstract",
+      "keyPoints": ["Main finding 1", "Main finding 2"],
+      "subsections": [],
       "dependencies": [],
-      "paragraphRange": {"start": 0, "end": 5}
+      "paragraphRange": {"start": 0, "end": 1}
+    },
+    {
+      "id": "introduction",
+      "title": "Introduction",
+      "keyPoints": ["Context", "Problem", "Thesis", "Roadmap"],
+      "subsections": ["Background", "Problem Statement", "Thesis and Approach"],
+      "dependencies": [],
+      "paragraphRange": {"start": 1, "end": 3}
+    },
+    {
+      "id": "literature_review",
+      "title": "Literature Review",
+      "keyPoints": ["Prior work overview"],
+      "subsections": ["Historical Context", "Contemporary Debates", "Research Gap"],
+      "dependencies": ["introduction"],
+      "paragraphRange": {"start": 3, "end": 6}
+    },
+    {
+      "id": "chapter_1",
+      "title": "CHAPTER 1: [Title Based on Content]",
+      "keyPoints": ["Main argument 1"],
+      "subsections": ["1.1 Subsection A", "1.2 Subsection B", "1.3 Subsection C"],
+      "dependencies": ["literature_review"],
+      "paragraphRange": {"start": 6, "end": 10}
     }
   ],
   "keyTerms": [{"term": "term", "definition": "meaning"}],
   "globalConstraints": ["Key claims that must remain consistent"],
-  "logicalFlow": "How the argument progresses"
+  "logicalFlow": "How the argument progresses from introduction through chapters to conclusion"
 }
+
+MANDATORY SECTIONS (in order):
+- abstract
+- introduction  
+- literature_review
+- chapter_1, chapter_2, chapter_3, ... (as many as needed)
+- conclusion
 
 CRITICAL REQUIREMENTS FOR paragraphRange:
 - start is INCLUSIVE, end is EXCLUSIVE (like Python slicing)
@@ -127,10 +168,7 @@ CRITICAL REQUIREMENTS FOR paragraphRange:
 - Cover ALL ${paragraphs.length} paragraphs: first section starts at 0, last section ends at ${paragraphs.length}
 - NO GAPS or overlaps between sections
 
-Example for ${paragraphs.length} paragraphs split into 3 sections:
-- Section 1: {"start": 0, "end": ${Math.floor(paragraphs.length / 3)}}
-- Section 2: {"start": ${Math.floor(paragraphs.length / 3)}, "end": ${Math.floor(2 * paragraphs.length / 3)}}
-- Section 3: {"start": ${Math.floor(2 * paragraphs.length / 3)}, "end": ${paragraphs.length}}
+CRITICAL: Each chapter MUST include a "subsections" array with 2-4 subsection titles.
 
 ${customInstructions ? `\nADDITIONAL INSTRUCTIONS: ${customInstructions}` : ''}
 
@@ -154,19 +192,25 @@ Return ONLY valid JSON.`;
     return outline;
   } catch (e) {
     console.error("[Outline-First] Failed to parse outline:", e);
-    // Return a minimal outline that covers all paragraphs
+    // Return a minimal outline that covers all paragraphs with mandatory structure
+    const totalParagraphs = paragraphs.length;
+    const abstractEnd = Math.ceil(totalParagraphs * 0.02);
+    const introEnd = Math.ceil(totalParagraphs * 0.08);
+    const litRevEnd = Math.ceil(totalParagraphs * 0.18);
+    const conclusionStart = Math.floor(totalParagraphs * 0.92);
+    
     return {
       thesis: "Document thesis not extracted",
-      sections: [{
-        id: "section_1",
-        title: "Full Document",
-        keyPoints: ["Reconstruct the entire document"],
-        dependencies: [],
-        paragraphRange: { start: 0, end: paragraphs.length }
-      }],
+      sections: [
+        { id: "abstract", title: "Abstract", keyPoints: ["Summary of findings"], subsections: [], dependencies: [], paragraphRange: { start: 0, end: abstractEnd } },
+        { id: "introduction", title: "Introduction", keyPoints: ["Context and thesis"], subsections: ["Background", "Problem Statement", "Thesis"], dependencies: [], paragraphRange: { start: abstractEnd, end: introEnd } },
+        { id: "literature_review", title: "Literature Review", keyPoints: ["Prior work"], subsections: ["Historical Context", "Contemporary Debates"], dependencies: ["introduction"], paragraphRange: { start: introEnd, end: litRevEnd } },
+        { id: "chapter_1", title: "CHAPTER 1: Main Argument", keyPoints: ["Core argument"], subsections: ["1.1 Foundation", "1.2 Development", "1.3 Evidence"], dependencies: ["literature_review"], paragraphRange: { start: litRevEnd, end: conclusionStart } },
+        { id: "conclusion", title: "Conclusion", keyPoints: ["Summary and implications"], subsections: [], dependencies: ["chapter_1"], paragraphRange: { start: conclusionStart, end: totalParagraphs } }
+      ],
       keyTerms: [],
       globalConstraints: [],
-      logicalFlow: "Single section reconstruction"
+      logicalFlow: "Introduction → Literature Review → Main Argument → Conclusion"
     };
   }
 }
@@ -198,7 +242,14 @@ async function reconstructSection(
     ? previousSections.slice(-3).map(s => `[${s.sectionId}]: ${s.content.substring(0, 300)}...`).join('\n\n')
     : "No previous sections yet.";
 
-  const prompt = `You are reconstructing ONE SECTION of a larger document.
+  // Build subsection instruction
+  const subsectionInstruction = section.subsections && section.subsections.length > 0
+    ? `\nSUBSECTIONS TO INCLUDE (use these as headings within this section):
+${section.subsections.map(s => `- ${s}`).join('\n')}
+Each subsection should be clearly marked with its title as a heading.`
+    : '';
+
+  const prompt = `You are reconstructing ONE SECTION of a larger FORMAL ACADEMIC DOCUMENT.
 
 DOCUMENT THESIS: ${outline.thesis}
 
@@ -216,14 +267,13 @@ ${outline.sections.map(s => `${s.id}: ${s.title}`).join('\n')}
 PREVIOUS SECTIONS (last 3, abbreviated):
 ${previousContext}
 
-═══════════════════════════════════════════════════
 CURRENT SECTION TO RECONSTRUCT: ${section.id} - ${section.title}
 
 KEY POINTS TO COVER:
 ${section.keyPoints.map(p => `- ${p}`).join('\n')}
+${subsectionInstruction}
 
 DEPENDS ON: ${section.dependencies.length > 0 ? section.dependencies.join(', ') : 'None'}
-═══════════════════════════════════════════════════
 
 ORIGINAL TEXT FOR THIS SECTION ONLY:
 ${sectionText}
@@ -247,8 +297,14 @@ COHERENCE REQUIREMENTS:
 4. Must flow logically from previous sections
 5. If this section depends on others, reference their conclusions appropriately
 
-OUTPUT: Write the reconstructed section content ONLY. No headers, no commentary.
-Aim for 300-600 words depending on the section's complexity.
+OUTPUT FORMAT:
+1. DO NOT include the section title at the start - it will be added by the system
+2. If subsections are specified above, include them as clear headings within the section content
+3. Write in formal academic prose - NO bullet points, NO markdown formatting
+4. Each subsection should flow naturally into the next
+
+Write the reconstructed section content ONLY. Do NOT start with the section title.
+${section.id === 'abstract' ? 'Aim for 200-400 words.' : section.id === 'conclusion' ? 'Aim for 400-800 words.' : 'Aim for 800-1500 words with clear subsections.'}
 
 ${customInstructions ? `\nADDITIONAL INSTRUCTIONS: ${customInstructions}` : ''}`;
 
@@ -480,13 +536,15 @@ export async function outlineFirstReconstruct(
   onProgress?.("Assembling final document...", totalSections, totalSections);
   
   // Create the final assembled document - CLEAN OUTPUT, no decorative separators
-  // Section headers are preserved as they are part of the academic structure
+  // LLM is instructed NOT to include titles, so we always prepend them here
   const assembledSections = outline.sections.map((section, idx) => {
     const output = sectionOutputs.find(s => s.sectionId === section.id);
     const sectionContent = output?.content || '';
     // Only include non-empty sections
     if (!sectionContent.trim()) return '';
-    return `${section.title}\n\n${sectionContent}`;
+    
+    // Always prepend the section title
+    return `${section.title}\n\n${sectionContent.trim()}`;
   }).filter(s => s.trim().length > 0);
   
   // Join with clean paragraph breaks only - no decorative separators

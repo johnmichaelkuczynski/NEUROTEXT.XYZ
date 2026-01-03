@@ -2774,34 +2774,14 @@ Structural understanding is always understanding of relationships. Observational
               aggressiveness
             });
             
-            // Build comprehensive header
-            const customInstructionsHeader = `${'═'.repeat(60)}
-YOUR CUSTOM INSTRUCTIONS (Followed Exactly)
-${'═'.repeat(60)}
-${customInstructions}
-${'═'.repeat(60)}
-
-`;
-
-            const analysisHeader = `Mode: Reconstruction (Universal Expansion)
-Model: Claude Sonnet 4
-Aggressiveness: ${aggressiveness.charAt(0).toUpperCase() + aggressiveness.slice(1)}
-Input: ${result.inputWordCount} words | Output: ${result.outputWordCount} words
-Sections Generated: ${result.sectionsGenerated} | Time: ${Math.round(result.processingTimeMs / 1000)}s
-
-`;
-
-            const documentHeader = `${'═'.repeat(60)}
-FULL EXPANDED DOCUMENT
-${'═'.repeat(60)}
-
-`;
-
+            // Log diagnostics to console only - output is clean essay text
             console.log(`[Universal Expansion] Complete: ${result.inputWordCount} → ${result.outputWordCount} words`);
+            console.log(`[Universal Expansion] Mode: Universal Expansion, Aggressiveness: ${aggressiveness}`);
+            console.log(`[Universal Expansion] Sections: ${result.sectionsGenerated}, Time: ${Math.round(result.processingTimeMs / 1000)}s`);
             
             return res.json({
               success: true,
-              output: customInstructionsHeader + analysisHeader + documentHeader + result.expandedText,
+              output: result.expandedText,
               mode: mode,
               inputWordCount: result.inputWordCount,
               outputWordCount: result.outputWordCount,
@@ -2840,89 +2820,15 @@ ${'═'.repeat(60)}
               aggressiveness
             );
             
-            // Format full outline with all key points
-            const formatFullOutline = (outline: typeof result.outline) => {
-              let outlineText = `${'═'.repeat(60)}
-STRICT OUTLINE (Generated First)
-${'═'.repeat(60)}
-
-THESIS: ${outline.thesis}
-
-LOGICAL FLOW: ${outline.logicalFlow}
-
-${'─'.repeat(60)}
-SECTIONS:
-${'─'.repeat(60)}
-`;
-              for (let i = 0; i < outline.sections.length; i++) {
-                const section = outline.sections[i];
-                outlineText += `
-${i + 1}. ${section.title.toUpperCase()}
-   Key Points:
-${section.keyPoints.map(kp => `   • ${kp}`).join('\n')}
-`;
-              }
-              
-              if (outline.keyTerms && outline.keyTerms.length > 0) {
-                outlineText += `
-${'─'.repeat(60)}
-KEY TERMS:
-${'─'.repeat(60)}
-`;
-                for (const kt of outline.keyTerms) {
-                  outlineText += `• ${kt.term}: ${kt.definition}\n`;
-                }
-              }
-              
-              if (outline.globalConstraints && outline.globalConstraints.length > 0) {
-                outlineText += `
-${'─'.repeat(60)}
-GLOBAL CONSTRAINTS:
-${'─'.repeat(60)}
-`;
-                for (const gc of outline.globalConstraints) {
-                  outlineText += `• ${gc}\n`;
-                }
-              }
-              
-              outlineText += `
-${'═'.repeat(60)}
-`;
-              return outlineText;
-            };
-
-            const customInstructionsHeader = customInstructions ? `${'═'.repeat(60)}
-YOUR CUSTOM INSTRUCTIONS (Applied to Both Outline and Rewrite)
-${'═'.repeat(60)}
-${customInstructions}
-${'═'.repeat(60)}
-
-` : '';
-
-            const analysisHeader = `Mode: Reconstruction (Outline-First)
-Model: Claude Sonnet 4
-Aggressiveness: ${aggressiveness.charAt(0).toUpperCase() + aggressiveness.slice(1)}
-Input: ${result.processingStats.inputWords} words | Output: ${result.processingStats.outputWords} words
-Sections: ${result.processingStats.sectionsProcessed} | Time: ${Math.round(result.processingStats.timeMs / 1000)}s
-
-`;
-
-            const fullOutlineSection = formatFullOutline(result.outline);
-
-            const documentHeader = `${'═'.repeat(60)}
-FULL DOCUMENT REWRITE (Based on Above Outline)
-${'═'.repeat(60)}
-
-`;
-
+            // Log diagnostics to console only - output is clean essay text
             console.log(`[Outline-First] Complete: ${result.processingStats.inputWords} → ${result.processingStats.outputWords} words`);
-            
-            // Combine all parts: Custom Instructions -> Analysis -> Full Outline -> Full Document
-            const fullOutput = customInstructionsHeader + analysisHeader + fullOutlineSection + documentHeader + result.reconstructedText;
+            console.log(`[Outline-First] Mode: Outline-First, Aggressiveness: ${aggressiveness}`);
+            console.log(`[Outline-First] Sections: ${result.processingStats.sectionsProcessed}, Time: ${Math.round(result.processingStats.timeMs / 1000)}s`);
+            console.log(`[Outline-First] Outline thesis: ${result.outline.thesis}`);
             
             return res.json({
               success: true,
-              output: fullOutput,
+              output: result.reconstructedText,
               mode: mode,
               inputWordCount: result.processingStats.inputWords,
               outputWordCount: result.processingStats.outputWords,
@@ -2955,33 +2861,13 @@ ${'═'.repeat(60)}
               undefined // contentAnalysis
             );
             
-            // Build comprehensive header for cross-chunk
-            const customInstructionsHeader = customInstructions ? `${'═'.repeat(60)}
-YOUR CUSTOM INSTRUCTIONS (Applied Throughout)
-${'═'.repeat(60)}
-${customInstructions}
-${'═'.repeat(60)}
-
-` : '';
-
-            const analysisHeader = `Mode: Reconstruction (Cross-Chunk for Very Long Documents)
-Model: Claude Sonnet 4
-Document Length: ${inputWordCount} words
-Chunks Processed: ${result.chunksProcessed || 'N/A'}
-
-`;
-
-            const documentHeader = `${'═'.repeat(60)}
-FULL DOCUMENT REWRITE (Cross-Chunk Coherent)
-${'═'.repeat(60)}
-
-`;
-
+            // Log diagnostics to console only - output is clean essay text
             console.log(`[Cross-Chunk] Complete: ${result.chunksProcessed || 0} chunks processed`);
+            console.log(`[Cross-Chunk] Mode: Cross-Chunk, Document length: ${inputWordCount} words`);
             
             return res.json({
               success: true,
-              output: customInstructionsHeader + analysisHeader + documentHeader + result.reconstructedText,
+              output: result.reconstructedText,
               mode: mode,
               inputWordCount: inputWordCount,
               reconstructionMethod: 'cross-chunk',
@@ -3834,63 +3720,15 @@ Be extremely strict - reject any approximations, generalizations, or unqualified
         }
       }
 
-      // Build parameter header for self-contained reports
-      const modeLabels: Record<string, string> = {
-        'reconstruction': 'Reconstruction',
-        'isomorphism': 'Isomorphism',
-        'mathmodel': 'Mathematical Model',
-        'autodecide': 'Auto-Decide',
-        'truth-isomorphism': 'Truth Isomorphism',
-        'math-truth-select': 'Math Truth Select'
-      };
-      
-      const providerLabels: Record<string, string> = {
-        'zhi1': 'ZHI 1',
-        'zhi2': 'ZHI 2',
-        'zhi3': 'ZHI 3',
-        'zhi4': 'ZHI 4',
-        'zhi5': 'ZHI 5'
-      };
-      
-      let parameterHeader = `═══════════════════════════════════════════════════
-ANALYSIS PARAMETERS
-═══════════════════════════════════════════════════
-Mode: ${modeLabels[mode] || mode}
-Model: ${providerLabels[provider] || provider}`;
-
-      if (fidelityLevel) {
-        parameterHeader += `\nAggressiveness: ${fidelityLevel.charAt(0).toUpperCase() + fidelityLevel.slice(1)}`;
-      }
-      if (targetDomain) {
-        parameterHeader += `\nTarget Domain: ${targetDomain}`;
-      }
-      if (mathFramework) {
-        parameterHeader += `\nMath Framework: ${mathFramework}`;
-      }
-      if (rigorLevel) {
-        parameterHeader += `\nRigor Level: ${rigorLevel}`;
-      }
-      if (constraintType) {
-        parameterHeader += `\nConstraint Type: ${constraintType}`;
-      }
-      if (truthMapping) {
-        parameterHeader += `\nTruth Mapping: ${truthMapping}`;
-      }
-      if (mathTruthMapping) {
-        parameterHeader += `\nMath Truth Mapping: ${mathTruthMapping}`;
-      }
-      if (literalTruth) {
-        parameterHeader += `\nLiteral Truth Mode: Enabled`;
-      }
-      if (customInstructions) {
-        parameterHeader += `\nCustom Instructions: ${customInstructions}`;
-      }
-      
-      parameterHeader += `\n═══════════════════════════════════════════════════\n\n`;
+      // Log parameters to console for diagnostics - output is clean text only
+      console.log(`[Text Model Validator] Mode: ${mode}, Provider: ${provider}`);
+      if (fidelityLevel) console.log(`[Text Model Validator] Aggressiveness: ${fidelityLevel}`);
+      if (targetDomain) console.log(`[Text Model Validator] Target Domain: ${targetDomain}`);
+      if (customInstructions) console.log(`[Text Model Validator] Has custom instructions`);
 
       res.json({
         success: true,
-        output: parameterHeader + output,
+        output: output,
         mode: mode
       });
 

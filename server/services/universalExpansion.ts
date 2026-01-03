@@ -406,8 +406,9 @@ CRITICAL REQUIREMENTS:
 5. NO MARKDOWN FORMATTING - use plain text only
 6. Include proper academic citations inline (Author, Year)
 7. Each paragraph should advance the argument
+8. DO NOT start with the section title - the system will add it
 
-Write the section now:`;
+Write the section content now (do NOT include the section title "${sectionName}" at the start):`;
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -522,7 +523,9 @@ Return a comprehensive outline that will ensure argumentative coherence across t
       customInstructions
     );
     
-    sections.push(`\n${'═'.repeat(60)}\n${section.name}\n${'═'.repeat(60)}\n\n${sectionContent}`);
+    // Clean output - no decorative separators
+    // Always prepend section title (LLM instructed not to include it)
+    sections.push(`${section.name}\n\n${sectionContent.trim()}`);
     
     // Keep track of previous sections (abbreviated) for context
     previousSections += `\n\n[${section.name}]: ${sectionContent.substring(0, 500)}...`;
