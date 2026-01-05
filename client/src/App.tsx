@@ -195,7 +195,7 @@ function Navigation() {
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <img src={neurotextLogo} alt="NEUROTEXT Logo" className="h-8 w-8 rounded-full" />
+            <img src={neurotextLogo} alt="NEUROTEXT Logo" className="h-12 w-12 rounded-full" />
             <span className="font-bold text-xl">NEUROTEXT</span>
           </div>
           <a 
