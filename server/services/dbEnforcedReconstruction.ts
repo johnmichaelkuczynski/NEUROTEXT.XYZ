@@ -630,8 +630,9 @@ export async function runFullReconstruction(
   customInstructions?: string,
   audienceParameters?: string,
   rigorLevel?: string,
-  onProgress?: (progress: ProcessingProgress) => void
-): Promise<DBEnforcedResult> {
+  onProgress?: (progress: ProcessingProgress) => void,
+  onChunk?: (chunk: { content: string; section?: string; progress?: number }) => void
+): Promise<DbEnforcedResult> {
   const startTime = Date.now();
   
   const wordCount = countWords(text);
