@@ -22,9 +22,10 @@ interface StreamingOutputModalProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete?: (finalText: string) => void;
+  startNew?: boolean;
 }
 
-export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingOutputModalProps) {
+export function StreamingOutputModal({ isOpen, onClose, onComplete, startNew = false }: StreamingOutputModalProps) {
   const [content, setContent] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const [currentSection, setCurrentSection] = useState<string>('');
@@ -35,6 +36,9 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
   const [copied, setCopied] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<string>('');
+  const hasStartedRef = useRef(false);
+  const wordCountRef = useRef(0);
   const { toast } = useToast();
 
   const scrollToBottom = useCallback(() => {
@@ -43,10 +47,10 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
     }
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
+  const clearContent = useCallback(() => {
     setContent('');
+    contentRef.current = '';
+    wordCountRef.current = 0;
     setProgress(0);
     setCurrentSection('Connecting...');
     setSectionsCompleted(0);
@@ -54,6 +58,17 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
     setWordCount(0);
     setIsComplete(false);
     setCopied(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (startNew && !hasStartedRef.current) {
+      clearContent();
+      hasStartedRef.current = true;
+    }
+    
+    setCurrentSection('Connecting...');
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/cc-stream`;
@@ -84,6 +99,7 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
             if (data.chunkText) {
               setContent(prev => {
                 const newContent = prev ? prev + '\n\n' + data.chunkText : data.chunkText || '';
+                contentRef.current = newContent;
                 return newContent;
               });
             }
@@ -100,6 +116,7 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
               setProgress(data.progress);
             }
             if (data.totalWordCount !== undefined) {
+              wordCountRef.current = data.totalWordCount;
               setWordCount(data.totalWordCount);
             }
             setTimeout(scrollToBottom, 100);
@@ -110,11 +127,12 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
             setProgress(100);
             setCurrentSection('Generation complete!');
             if (data.totalWordCount !== undefined) {
+              wordCountRef.current = data.totalWordCount;
               setWordCount(data.totalWordCount);
             }
             toast({
               title: "Generation Complete",
-              description: `${data.totalWordCount?.toLocaleString() || wordCount.toLocaleString()} words generated successfully.`,
+              description: `${data.totalWordCount?.toLocaleString() || wordCountRef.current.toLocaleString()} words generated successfully.`,
             });
             break;
         }
@@ -138,7 +156,13 @@ export function StreamingOutputModal({ isOpen, onClose, onComplete }: StreamingO
       }
       wsRef.current = null;
     };
-  }, [isOpen, toast, scrollToBottom, wordCount]);
+  }, [isOpen, toast, scrollToBottom, startNew, clearContent]);
+
+  useEffect(() => {
+    if (!startNew) {
+      hasStartedRef.current = false;
+    }
+  }, [startNew]);
 
   const handleCopy = async () => {
     try {

@@ -198,6 +198,7 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   
   // Streaming Output Modal State (for real-time expansion preview)
   const [streamingModalOpen, setStreamingModalOpen] = useState(false);
+  const [streamingStartNew, setStreamingStartNew] = useState(false);
   
   // Objections Function State (standalone)
   const [objectionsOutput, setObjectionsOutput] = useState("");
@@ -814,7 +815,8 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     const isExpansionRequest = hasExpansionInstructions(validatorCustomInstructions);
     
     if (isExpansionRequest) {
-      // Open streaming modal for real-time preview
+      // Open streaming modal for real-time preview - signal new generation
+      setStreamingStartNew(true);
       setStreamingModalOpen(true);
       setValidatorProgress("Streaming output in real-time...");
     } else if (wordCount >= 1200 && wordCount <= 25000) {
@@ -7879,7 +7881,11 @@ Generated on: ${new Date().toLocaleString()}`;
       {/* Streaming Output Modal for real-time expansion preview */}
       <StreamingOutputModal
         isOpen={streamingModalOpen}
-        onClose={() => setStreamingModalOpen(false)}
+        startNew={streamingStartNew}
+        onClose={() => {
+          setStreamingModalOpen(false);
+          setStreamingStartNew(false);
+        }}
         onComplete={(finalText: string) => {
           if (finalText) {
             setValidatorOutput(stripMarkdown(finalText));
