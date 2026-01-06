@@ -2724,40 +2724,9 @@ Structural understanding is always understanding of relationships. Observational
         // Count input words for reference
         const inputWordCount = text.trim().split(/\s+/).length;
         
-        // Check if this is a position list (pipe-delimited format)
-        const { isPositionList, processPositionList } = await import('./services/positionListReconstruction');
-        if (isPositionList(text)) {
-          console.log(`[Position-List] Detected structured position list input`);
-          try {
-            const result = await processPositionList(text, customInstructions || '');
-            
-            if (!result.success) {
-              return res.status(500).json({
-                success: false,
-                message: result.error || 'Position list processing failed'
-              });
-            }
-            
-            return res.json({
-              success: true,
-              output: result.output,
-              mode: mode,
-              reconstructionMethod: 'position-list',
-              positionsProcessed: result.positionsProcessed,
-              positionsSelected: result.positionsSelected,
-              totalPositions: result.totalPositions
-            });
-          } catch (plError: any) {
-            console.error('[Position-List] Error:', plError);
-            return res.status(500).json({
-              success: false,
-              message: `Position list processing failed: ${plError.message}`
-            });
-          }
-        }
-        
         // PROTOCOL: User instructions are ALWAYS obeyed. No thresholds. No "simple mode".
-        // Check if user has expansion instructions - if so, use universal expansion regardless of input length
+        // Check if user has expansion instructions FIRST - this takes priority over position-list detection
+        // because expansion instructions enable streaming which is critical for large outputs
         const { hasExpansionInstructions, universalExpand, parseExpansionInstructions } = await import('./services/universalExpansion');
         const { broadcastGenerationChunk } = await import('./services/ccStreamingService');
         
@@ -2816,6 +2785,39 @@ Structural understanding is always understanding of relationships. Observational
             return res.status(500).json({
               success: false,
               message: `Universal expansion failed: ${ueError.message}`
+            });
+          }
+        }
+        
+        // Check if this is a position list (pipe-delimited format) - checked AFTER expansion instructions
+        // so that expansion instructions take priority for streaming support
+        const { isPositionList, processPositionList } = await import('./services/positionListReconstruction');
+        if (isPositionList(text)) {
+          console.log(`[Position-List] Detected structured position list input`);
+          try {
+            const result = await processPositionList(text, customInstructions || '');
+            
+            if (!result.success) {
+              return res.status(500).json({
+                success: false,
+                message: result.error || 'Position list processing failed'
+              });
+            }
+            
+            return res.json({
+              success: true,
+              output: result.output,
+              mode: mode,
+              reconstructionMethod: 'position-list',
+              positionsProcessed: result.positionsProcessed,
+              positionsSelected: result.positionsSelected,
+              totalPositions: result.totalPositions
+            });
+          } catch (plError: any) {
+            console.error('[Position-List] Error:', plError);
+            return res.status(500).json({
+              success: false,
+              message: `Position list processing failed: ${plError.message}`
             });
           }
         }

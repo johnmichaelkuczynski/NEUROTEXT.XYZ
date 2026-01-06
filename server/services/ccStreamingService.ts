@@ -88,6 +88,7 @@ export function broadcastGenerationChunk(message: {
   type: string;
   sessionId?: number;
   chunkIndex?: number;
+  sectionIndex?: number;
   totalChunks?: number;
   chunkText?: string;
   sectionTitle?: string;
