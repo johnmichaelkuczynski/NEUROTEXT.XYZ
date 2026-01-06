@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useEffect, useRef } from "react";
 import {
   useQuery,
   useMutation,
@@ -21,6 +21,8 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const autoLoginAttempted = useRef(false);
+  
   const {
     data: user,
     error,
@@ -79,6 +81,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+
+  // Auto-login as JMK when no user is logged in
+  useEffect(() => {
+    if (!isLoading && !user && !autoLoginAttempted.current && !loginMutation.isPending) {
+      autoLoginAttempted.current = true;
+      console.log('[Auth] Auto-logging in as JMK...');
+      loginMutation.mutate({ username: 'JMK', password: 'dev123' });
+    }
+  }, [isLoading, user, loginMutation]);
 
   return (
     <AuthContext.Provider

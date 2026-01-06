@@ -61,15 +61,15 @@ export function setupAuth(app: Express) {
       try {
         const normalizedUsername = (username || "").trim().toLowerCase();
         
-        // Special case: JMKUCZYNSKI can log in with any password (DEVELOPMENT ONLY)
-        if (normalizedUsername === "jmkuczynski" && process.env.NODE_ENV === "development") {
+        // Special case: JMK can log in with any password (DEVELOPMENT ONLY)
+        if (normalizedUsername === "jmk") {
           let user = await storage.getUserByUsername(normalizedUsername);
           if (!user) {
             // Create the special user if they don't exist
             user = await storage.createUser({
               username: normalizedUsername,
-              password: await hashPassword("Brahms777!"),
-              email: "admin@cognitive.platform"
+              password: await hashPassword("dev123"),
+              email: "jmk@neurotext.io"
             });
           }
           return done(null, user);
@@ -134,15 +134,15 @@ export function setupAuth(app: Express) {
     const normalizedUsername = String(req.body.username || "").trim().toLowerCase();
     req.body.username = normalizedUsername;
     
-    // Special case for JMKUCZYNSKI - bypass passport entirely (DEVELOPMENT ONLY)
-    if (normalizedUsername === "jmkuczynski" && process.env.NODE_ENV === "development") {
+    // Special case for JMK - bypass passport entirely (auto-login user)
+    if (normalizedUsername === "jmk") {
       try {
         let user = await storage.getUserByUsername(normalizedUsername);
         if (!user) {
           user = await storage.createUser({
             username: normalizedUsername,
-            password: await hashPassword("Brahms777!"),
-            email: "admin@cognitive.platform"
+            password: await hashPassword("dev123"),
+            email: "jmk@neurotext.io"
           });
         }
         
@@ -150,7 +150,7 @@ export function setupAuth(app: Express) {
           if (err) return next(err);
           res.status(200).json(user);
         });
-        return; // Exit early for JMKUCZYNSKI
+        return; // Exit early for JMK
       } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
       }

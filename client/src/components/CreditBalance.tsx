@@ -22,7 +22,8 @@ export function CreditBalance() {
 
   if (!credits) return null;
 
-  const formatCredits = (amount: number) => {
+  const formatCredits = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) return "0";
     if (amount === Number.POSITIVE_INFINITY) return "∞";
     if (amount >= 1000000) return `${(amount / 1000000).toFixed(1)}M`;
     if (amount >= 1000) return `${(amount / 1000).toFixed(1)}K`;
