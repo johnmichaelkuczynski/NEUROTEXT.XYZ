@@ -315,7 +315,10 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     resumeFromChunk: number;
     globalState: any;
     existingChunks: number;
+    originalText?: string;
+    autoStart?: boolean;
   } | null>(null);
+  const [autoStartTriggered, setAutoStartTriggered] = useState(false);
   
   // Check for resume job data on mount
   useEffect(() => {
@@ -328,16 +331,53 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
         if (parsed.coherenceMode) {
           setCoherenceType(parsed.coherenceMode as any);
         }
-        toast({
-          title: "Resume Job Available",
-          description: `Found interrupted job with ${parsed.existingChunks} chunks. Click "Resume Job" to continue.`,
-        });
+        // If we have non-empty original text and autoStart flag, set up for auto-start
+        if (parsed.originalText && parsed.originalText.trim().length > 0 && parsed.autoStart) {
+          setCoherenceInputText(parsed.originalText);
+          toast({
+            title: "Auto-resuming Job",
+            description: `Loading ${parsed.existingChunks} saved chunks and resuming processing...`,
+          });
+        } else if (parsed.autoStart && (!parsed.originalText || parsed.originalText.trim().length === 0)) {
+          // Auto-start was requested but no original text available
+          toast({
+            title: "Cannot Auto-Resume",
+            description: "Original text not available. Please paste your text and click Resume Job manually.",
+            variant: "destructive",
+          });
+          // Clear the autoStart flag since we can't auto-start
+          parsed.autoStart = false;
+          setResumeJobData(parsed);
+        } else {
+          toast({
+            title: "Resume Job Available",
+            description: `Found interrupted job with ${parsed.existingChunks} chunks. Click "Resume Job" to continue.`,
+          });
+        }
       } catch (e) {
         console.error("Error parsing resume data:", e);
         sessionStorage.removeItem('resumeJob');
       }
     }
   }, []);
+  
+  // Auto-start processing when resume data is loaded with autoStart flag
+  useEffect(() => {
+    // Only auto-start if we have valid original text (non-empty)
+    const hasValidText = resumeJobData?.originalText && resumeJobData.originalText.trim().length > 0;
+    const inputTextReady = coherenceInputText && coherenceInputText.trim().length > 0;
+    
+    if (resumeJobData?.autoStart && hasValidText && inputTextReady && !autoStartTriggered && !coherenceLoading) {
+      setAutoStartTriggered(true);
+      // Small delay to ensure UI is ready
+      const timer = setTimeout(() => {
+        handleCoherenceRewrite();
+        // Clear the autoStart flag after triggering
+        sessionStorage.removeItem('resumeJob');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [resumeJobData, coherenceInputText, autoStartTriggered, coherenceLoading]);
   
   const dismissResumeJob = () => {
     sessionStorage.removeItem('resumeJob');

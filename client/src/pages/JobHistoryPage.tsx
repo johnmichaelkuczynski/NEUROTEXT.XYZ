@@ -133,19 +133,23 @@ export function JobHistoryPage() {
       
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: 'Resume Ready',
-          description: `Job can resume from chunk ${data.resumeFromChunk}. Go to Coherence Meter to continue.`,
-        });
         
         // Store resume data in sessionStorage for the Coherence Meter to pick up
+        // Include original text for auto-start functionality
         sessionStorage.setItem('resumeJob', JSON.stringify({
           documentId: job.documentId,
           coherenceMode: data.coherenceMode,
           resumeFromChunk: data.resumeFromChunk,
           globalState: data.globalState,
           existingChunks: data.existingChunks,
+          originalText: data.originalText || '', // Include original text for auto-resume
+          autoStart: true, // Flag to trigger auto-start on load
         }));
+        
+        toast({
+          title: 'Resuming Job',
+          description: `Loading job data and resuming from chunk ${data.resumeFromChunk + 1}...`,
+        });
         
         // Redirect to home page where Coherence Meter is
         window.location.href = '/#coherence-meter';

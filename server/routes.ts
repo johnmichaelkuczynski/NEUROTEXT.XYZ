@@ -1602,7 +1602,6 @@ ${externalKnowledge}`;
   app.post("/api/jobs/:documentId/resume", async (req: Request, res: Response) => {
     try {
       const { documentId } = req.params;
-      const { originalText, coherenceMode, customInstructions } = req.body;
       
       // Get existing job data
       const jobData = await storage.getJobWithChunks(documentId);
@@ -1614,7 +1613,17 @@ ${externalKnowledge}`;
       const lastChunkIndex = chunks.length > 0 ? Math.max(...chunks.map(c => c.chunkIndex)) : -1;
       const globalState = document.globalState;
       
-      console.log(`[Resume] Resuming job ${documentId} from chunk ${lastChunkIndex + 1}`);
+      // Reconstruct original text from chunks (sort by chunkIndex and join)
+      const sortedChunks = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex);
+      const originalText = sortedChunks
+        .map(c => c.chunkText || '')
+        .filter(t => t.length > 0)
+        .join('\n\n');
+      
+      // Also check for stitched document in globalState
+      const stitchedDocument = (globalState as any)?.stitchedDocument || '';
+      
+      console.log(`[Resume] Resuming job ${documentId} from chunk ${lastChunkIndex + 1}, originalText length: ${originalText.length}`);
       
       res.json({
         success: true,
@@ -1623,7 +1632,9 @@ ${externalKnowledge}`;
         existingChunks: chunks.length,
         globalState,
         coherenceMode: document.coherenceMode,
-        message: `Ready to resume from chunk ${lastChunkIndex + 1}. Use the coherence endpoint with resumeFrom parameter.`
+        originalText: originalText, // Include reconstructed original text
+        stitchedDocument: stitchedDocument, // Include stitched output if available
+        message: `Ready to resume from chunk ${lastChunkIndex + 1}.`
       });
     } catch (error: any) {
       console.error("Error resuming job:", error);
