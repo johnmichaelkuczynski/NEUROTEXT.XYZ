@@ -438,6 +438,8 @@ Write the section content now (do NOT include the section title "${sectionName}"
     model: "claude-sonnet-4-20250514",
     max_tokens: Math.ceil(targetWordCount * 2), // Allow plenty of room
     messages: [{ role: "user", content: prompt }]
+  }, {
+    timeout: 600000 // 10 minute timeout for non-streaming calls
   });
 
   const content = response.content[0].type === 'text' ? response.content[0].text : '';
