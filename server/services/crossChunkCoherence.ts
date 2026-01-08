@@ -1786,6 +1786,12 @@ BEGIN THE CONTINUATION NOW:`;
  * Generate multiple continuations until target word count is met.
  * Returns the combined continuation text and metadata about the process.
  */
+export interface ContinuationChunkData {
+  text: string;
+  wordCount: number;
+  delta: ChunkDelta;
+}
+
 export async function enforceWordCountWithContinuations(
   existingContent: string,
   skeleton: GlobalSkeleton,
@@ -1799,10 +1805,12 @@ export async function enforceWordCountWithContinuations(
   continuationsGenerated: number;
   targetMet: boolean;
   shortfallReason?: string;
+  continuationChunks: ContinuationChunkData[];
 }> {
   let currentContent = existingContent;
   let currentWordCount = countWords(existingContent);
   let continuationsGenerated = 0;
+  const continuationChunks: ContinuationChunkData[] = [];
   
   console.log(`[CC-ENFORCE] Starting word count enforcement. Current: ${currentWordCount}, Target: ${targetWordCount}`);
   
@@ -1829,8 +1837,15 @@ export async function enforceWordCountWithContinuations(
         priorDeltasContext
       });
       
-      // Append the continuation
-      currentContent = currentContent.trim() + '\n\n' + result.continuationText.trim();
+      // Store continuation chunk data for later persistence
+      continuationChunks.push({
+        text: result.continuationText,
+        wordCount: result.wordCount,
+        delta: result.delta
+      });
+      
+      // Append the continuation (preserve original length for later extraction)
+      currentContent = currentContent + '\n\n' + result.continuationText;
       currentWordCount = countWords(currentContent);
       continuationsGenerated++;
       
@@ -1883,6 +1898,7 @@ export async function enforceWordCountWithContinuations(
     finalWordCount: currentWordCount,
     continuationsGenerated,
     targetMet,
-    shortfallReason
+    shortfallReason,
+    continuationChunks
   };
 }
