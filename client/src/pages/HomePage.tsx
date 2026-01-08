@@ -219,6 +219,7 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   // FULL SUITE Pipeline State - runs Reconstruction → Objections → Objection-Proof in sequence
   const [fullSuiteLoading, setFullSuiteLoading] = useState(false);
   const [fullSuiteStage, setFullSuiteStage] = useState<"idle" | "batch" | "objections" | "objection-proof" | "complete" | "error">("idle");
+  const [fullSuiteActiveTab, setFullSuiteActiveTab] = useState<string>("reconstruction");
   const [fullSuiteError, setFullSuiteError] = useState<string>("");
   const [showFullSuitePanel, setShowFullSuitePanel] = useState(true);
   const [fullSuiteAdditionalInfo, setFullSuiteAdditionalInfo] = useState("");
@@ -1448,8 +1449,19 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     setFullSuitePopupOpen(false);
 
     const allModes = ["reconstruction"];
+    
+    // Detect if this is an expansion request
+    const isExpansionRequest = hasExpansionInstructions(validatorCustomInstructions);
 
     try {
+      // ============ OPEN UNIFIED POPUP IMMEDIATELY ============
+      // Show the popup from the start so user can see progress
+      setFullSuitePopupOpen(true);
+      setFullSuiteActiveTab("reconstruction");
+      setFullSuiteReconstructionOutput("");
+      setObjectionsOutput("");
+      setFullSuiteObjectionProofOutput("");
+      
       // ============ STAGE 1: RECONSTRUCTION ============
       console.log("[FULL SUITE] Stage 1: Running reconstruction...");
       
@@ -1503,12 +1515,12 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       // Use the reconstruction output for objections
       const reconstructionOutput = successfulResults[0]?.output || validatorInputText;
       
-      // Store and show reconstruction output in popup
+      // Store reconstruction output (popup already open)
       setFullSuiteReconstructionOutput(reconstructionOutput);
-      setFullSuiteReconstructionPopupOpen(true);
 
       // ============ STAGE 2: OBJECTIONS ============
       setFullSuiteStage("objections");
+      setFullSuiteActiveTab("objections");
       console.log("[FULL SUITE] Stage 2: Running Objections generation...");
 
       const objectionsResponse = await fetch('/api/text-model-validator/objections', {
@@ -1541,12 +1553,11 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       setObjectionsInputText(reconstructionOutput);
       console.log("[FULL SUITE] Stage 2 complete: Objections generated");
       
-      // Show objections output in popup (auto-close reconstruction popup)
-      setFullSuiteReconstructionPopupOpen(false);
-      setFullSuiteObjectionsPopupOpen(true);
+      // Objections output is now stored - popup already open and will show it
 
       // ============ STAGE 3: OBJECTION-PROOF VERSION ============
       setFullSuiteStage("objection-proof");
+      setFullSuiteActiveTab("final");
       console.log("[FULL SUITE] Stage 3: Generating objection-proof version...");
 
       const objectionProofResponse = await fetch('/api/objection-proof-rewrite', {
@@ -1576,9 +1587,7 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
       // ============ COMPLETE ============
       setFullSuiteStage("complete");
-      // Auto-close objections popup and open final popup
-      setFullSuiteObjectionsPopupOpen(false);
-      setFullSuitePopupOpen(true); // Open the popup modal with final output
+      // Popup already open - final output now stored and will be displayed
       toast({
         title: "Full Suite Complete!",
         description: "Pipeline finished: Reconstruction + Objections + Objection-Proof Version",
@@ -8279,13 +8288,22 @@ Generated on: ${new Date().toLocaleString()}`;
             {/* Popup Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30 rounded-t-lg">
               <div className="flex items-center gap-3 flex-wrap">
-                <Badge className="bg-blue-600 text-white text-sm px-3 py-1">
-                  Stage 1: Reconstruction Complete
-                </Badge>
-                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-                  {fullSuiteReconstructionOutput.trim().split(/\s+/).length.toLocaleString()} words
-                </Badge>
-                {fullSuiteLoading && (
+                {fullSuiteReconstructionOutput.startsWith("Generating expanded document") ? (
+                  <Badge className="bg-blue-600 text-white text-sm px-3 py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Stage 1: Generating Reconstruction...
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge className="bg-blue-600 text-white text-sm px-3 py-1">
+                      Stage 1: Reconstruction Complete
+                    </Badge>
+                    <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                      {fullSuiteReconstructionOutput.trim().split(/\s+/).length.toLocaleString()} words
+                    </Badge>
+                  </>
+                )}
+                {fullSuiteLoading && fullSuiteStage === "objections" && (
                   <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 animate-pulse">
                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                     Processing Objections...
@@ -8406,80 +8424,248 @@ Generated on: ${new Date().toLocaleString()}`;
         </div>
       )}
 
-      {/* Full Suite FINAL Output Popup Modal */}
-      {fullSuitePopupOpen && fullSuiteObjectionProofOutput && (
+      {/* Full Suite UNIFIED Popup Modal - Shows all phases */}
+      {fullSuitePopupOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" data-testid="full-suite-popup-overlay">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl border-2 border-violet-400 dark:border-violet-600 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl border-2 border-violet-400 dark:border-violet-600 max-w-5xl w-full mx-4 max-h-[90vh] flex flex-col">
             {/* Popup Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-violet-50 dark:bg-violet-900/30 rounded-t-lg">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 via-amber-50 to-violet-50 dark:from-blue-900/30 dark:via-amber-900/30 dark:to-violet-900/30 rounded-t-lg">
               <div className="flex items-center gap-3 flex-wrap">
-                <Badge className="bg-violet-600 text-white text-sm px-3 py-1">
-                  Full Suite Complete
+                <Badge className={`text-white text-sm px-3 py-1 ${
+                  fullSuiteStage === 'complete' ? 'bg-green-600' :
+                  fullSuiteStage === 'error' ? 'bg-red-600' :
+                  'bg-violet-600 animate-pulse'
+                }`}>
+                  {fullSuiteStage === 'complete' ? 'Full Suite Complete' :
+                   fullSuiteStage === 'error' ? 'Error' :
+                   fullSuiteStage === 'batch' ? 'Stage 1: Reconstruction...' :
+                   fullSuiteStage === 'objections' ? 'Stage 2: Objections...' :
+                   fullSuiteStage === 'objection-proof' ? 'Stage 3: Final Version...' :
+                   'Processing...'}
                 </Badge>
-                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-                  {fullSuiteObjectionProofOutput.trim().split(/\s+/).length.toLocaleString()} words
-                </Badge>
+                {fullSuiteLoading && (
+                  <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 animate-pulse">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Processing...
+                  </Badge>
+                )}
+                {/* Stage indicators */}
+                <div className="flex items-center gap-1">
+                  <div className={`w-3 h-3 rounded-full ${fullSuiteReconstructionOutput ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`} title="Reconstruction" />
+                  <div className={`w-3 h-3 rounded-full ${objectionsOutput ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'}`} title="Objections" />
+                  <div className={`w-3 h-3 rounded-full ${fullSuiteObjectionProofOutput ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-600'}`} title="Final Version" />
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(fullSuiteObjectionProofOutput);
-                    toast({ title: "Copied!", description: "Full Suite output copied to clipboard" });
-                  }}
-                  className="border-violet-300 dark:border-violet-600"
-                  data-testid="button-copy-full-suite"
-                >
-                  <Copy className="w-4 h-4 mr-1" />
-                  Copy
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const blob = new Blob([fullSuiteObjectionProofOutput], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `full-suite-output-${new Date().toISOString().split('T')[0]}.txt`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    toast({ title: "Downloaded!", description: "Full Suite output saved as text file" });
-                  }}
-                  className="border-violet-300 dark:border-violet-600"
-                  data-testid="button-download-full-suite"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Download
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setFullSuitePopupOpen(false)}
-                  data-testid="button-close-full-suite-popup"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setFullSuitePopupOpen(false)}
+                data-testid="button-close-full-suite-popup"
+              >
+                <X className="w-4 h-4" />
+              </Button>
             </div>
-            {/* Popup Content */}
-            <div className="flex-1 overflow-auto p-4">
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-800 dark:text-gray-200">
-                {fullSuiteObjectionProofOutput}
-              </pre>
+            
+            {/* Popup Content - Tabbed view of all phases */}
+            <div className="flex-1 overflow-hidden p-4">
+              <Tabs value={fullSuiteActiveTab} onValueChange={setFullSuiteActiveTab} className="h-full flex flex-col">
+                <TabsList className="grid w-full grid-cols-3 mb-4">
+                  <TabsTrigger value="reconstruction" className="relative">
+                    Reconstruction
+                    {fullSuiteReconstructionOutput && <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />}
+                  </TabsTrigger>
+                  <TabsTrigger value="objections" className="relative">
+                    Objections
+                    {objectionsOutput && <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full" />}
+                  </TabsTrigger>
+                  <TabsTrigger value="final" className="relative">
+                    Final Version
+                    {fullSuiteObjectionProofOutput && <span className="absolute -top-1 -right-1 w-2 h-2 bg-violet-500 rounded-full" />}
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="reconstruction" className="flex-1 overflow-hidden flex flex-col mt-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {fullSuiteReconstructionOutput ? (
+                        <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                          {fullSuiteReconstructionOutput.trim().split(/\s+/).length.toLocaleString()} words
+                        </Badge>
+                      ) : fullSuiteStage === 'batch' ? (
+                        <Badge variant="outline" className="animate-pulse">
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Generating...
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Waiting...</Badge>
+                      )}
+                    </div>
+                    {fullSuiteReconstructionOutput && (
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => {
+                          navigator.clipboard.writeText(fullSuiteReconstructionOutput);
+                          toast({ title: "Copied!", description: "Reconstruction copied" });
+                        }} data-testid="button-copy-reconstruction">
+                          <Copy className="w-4 h-4 mr-1" />Copy
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => {
+                          const blob = new Blob([fullSuiteReconstructionOutput], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `reconstruction-${new Date().toISOString().split('T')[0]}.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toast({ title: "Downloaded!" });
+                        }} data-testid="button-download-reconstruction">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <ScrollArea className="flex-1 border rounded-md">
+                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed p-4 text-gray-800 dark:text-gray-200">
+                      {fullSuiteReconstructionOutput || (fullSuiteStage === 'batch' ? 'Generating reconstruction...' : 'Waiting to start...')}
+                    </pre>
+                  </ScrollArea>
+                </TabsContent>
+                
+                <TabsContent value="objections" className="flex-1 overflow-hidden flex flex-col mt-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {objectionsOutput ? (
+                        <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                          {objectionsOutput.trim().split(/\s+/).length.toLocaleString()} words
+                        </Badge>
+                      ) : fullSuiteStage === 'objections' ? (
+                        <Badge variant="outline" className="animate-pulse">
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Generating...
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Waiting...</Badge>
+                      )}
+                    </div>
+                    {objectionsOutput && (
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => {
+                          navigator.clipboard.writeText(objectionsOutput);
+                          toast({ title: "Copied!", description: "Objections copied" });
+                        }} data-testid="button-copy-objections">
+                          <Copy className="w-4 h-4 mr-1" />Copy
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => {
+                          const blob = new Blob([objectionsOutput], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `objections-${new Date().toISOString().split('T')[0]}.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toast({ title: "Downloaded!" });
+                        }} data-testid="button-download-objections">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <ScrollArea className="flex-1 border rounded-md">
+                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed p-4 text-gray-800 dark:text-gray-200">
+                      {objectionsOutput || (fullSuiteStage === 'objections' ? 'Generating objections...' : 'Waiting for reconstruction to complete...')}
+                    </pre>
+                  </ScrollArea>
+                </TabsContent>
+                
+                <TabsContent value="final" className="flex-1 overflow-hidden flex flex-col mt-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {fullSuiteObjectionProofOutput ? (
+                        <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                          {fullSuiteObjectionProofOutput.trim().split(/\s+/).length.toLocaleString()} words
+                        </Badge>
+                      ) : fullSuiteStage === 'objection-proof' ? (
+                        <Badge variant="outline" className="animate-pulse">
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Generating...
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Waiting...</Badge>
+                      )}
+                    </div>
+                    {fullSuiteObjectionProofOutput && (
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => {
+                          navigator.clipboard.writeText(fullSuiteObjectionProofOutput);
+                          toast({ title: "Copied!", description: "Final version copied" });
+                        }} data-testid="button-copy-final">
+                          <Copy className="w-4 h-4 mr-1" />Copy
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => {
+                          const blob = new Blob([fullSuiteObjectionProofOutput], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `final-version-${new Date().toISOString().split('T')[0]}.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toast({ title: "Downloaded!" });
+                        }} data-testid="button-download-final">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <ScrollArea className="flex-1 border rounded-md">
+                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed p-4 text-gray-800 dark:text-gray-200">
+                      {fullSuiteObjectionProofOutput || (fullSuiteStage === 'objection-proof' ? 'Generating final objection-proof version...' : 'Waiting for objections to complete...')}
+                    </pre>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
             </div>
+            
             {/* Popup Footer */}
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-b-lg">
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                <TextStats text={fullSuiteObjectionProofOutput} showAiDetect={true} variant="compact" />
-                <Button
-                  onClick={() => setFullSuitePopupOpen(false)}
-                  className="bg-violet-600 hover:bg-violet-700 text-white"
-                  data-testid="button-done-full-suite"
-                >
-                  Done
-                </Button>
+                {fullSuiteStage === 'complete' && fullSuiteObjectionProofOutput && (
+                  <TextStats text={fullSuiteObjectionProofOutput} showAiDetect={true} variant="compact" />
+                )}
+                {fullSuiteStage === 'error' && fullSuiteError && (
+                  <span className="text-red-600 text-sm">{fullSuiteError}</span>
+                )}
+                {fullSuiteLoading && (
+                  <span className="text-muted-foreground text-sm">Processing pipeline...</span>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  {fullSuiteStage === 'complete' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const allContent = `=== RECONSTRUCTION ===\n\n${fullSuiteReconstructionOutput}\n\n=== OBJECTIONS ===\n\n${objectionsOutput}\n\n=== FINAL VERSION ===\n\n${fullSuiteObjectionProofOutput}`;
+                        const blob = new Blob([allContent], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `full-suite-all-${new Date().toISOString().split('T')[0]}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast({ title: "Downloaded!", description: "All phases saved" });
+                      }}
+                      data-testid="button-download-all"
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      Download All
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => setFullSuitePopupOpen(false)}
+                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                    data-testid="button-close-full-suite"
+                  >
+                    {fullSuiteStage === 'complete' ? 'Done' : 'Close'}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

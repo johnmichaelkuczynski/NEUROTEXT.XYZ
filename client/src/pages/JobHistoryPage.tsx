@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -30,7 +32,9 @@ import {
   Clock, 
   AlertCircle,
   FileText,
-  Loader2
+  Loader2,
+  Home,
+  Copy
 } from 'lucide-react';
 
 interface Job {
@@ -235,6 +239,12 @@ export function JobHistoryPage() {
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="mr-2" data-testid="button-home">
+              <Home className="w-4 h-4 mr-1" />
+              Home
+            </Button>
+          </Link>
           <History className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-bold" data-testid="text-job-history-title">Job History</h1>
         </div>
@@ -303,7 +313,7 @@ export function JobHistoryPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => viewJob(job.documentId)}
+                          onClick={() => fetchJobDetail(job)}
                           data-testid={`button-view-${job.documentId}`}
                         >
                           <Eye className="w-4 h-4" />
@@ -350,6 +360,9 @@ export function JobHistoryPage() {
               <FileText className="w-5 h-5" />
               Job Details: {selectedJob?.documentId.slice(0, 12)}...
             </DialogTitle>
+            <DialogDescription>
+              View the full content and chunks for this job
+            </DialogDescription>
           </DialogHeader>
           
           {detailLoading ? (
@@ -357,13 +370,133 @@ export function JobHistoryPage() {
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : jobDetail ? (
-            <Tabs defaultValue="overview" className="w-full">
+            <Tabs defaultValue="combined" className="w-full">
               <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="combined">Combined Output</TabsTrigger>
                 <TabsTrigger value="chunks">Chunks ({jobDetail.chunks.length})</TabsTrigger>
-                <TabsTrigger value="output">Final Output</TabsTrigger>
+                <TabsTrigger value="overview">Overview</TabsTrigger>
               </TabsList>
               
+              <TabsContent value="combined" className="mt-4">
+                <div className="flex items-center justify-end gap-2 mb-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const text = jobDetail.chunks
+                        .sort((a, b) => a.chunkIndex - b.chunkIndex)
+                        .map(c => c.chunkText || '')
+                        .filter(t => t.length > 0)
+                        .join('\n\n');
+                      navigator.clipboard.writeText(text || jobDetail.document.globalState?.stitchedDocument || '');
+                      toast({ title: "Copied!", description: "Full content copied to clipboard" });
+                    }}
+                    data-testid="button-copy-combined"
+                  >
+                    <Copy className="w-4 h-4 mr-1" />
+                    Copy All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const text = jobDetail.chunks
+                        .sort((a, b) => a.chunkIndex - b.chunkIndex)
+                        .map(c => c.chunkText || '')
+                        .filter(t => t.length > 0)
+                        .join('\n\n') || jobDetail.document.globalState?.stitchedDocument || '';
+                      const blob = new Blob([text], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `job-${selectedJob?.documentId?.slice(0, 8) || 'output'}.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      toast({ title: "Downloaded!", description: "Content saved to file" });
+                    }}
+                    data-testid="button-download-combined"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    Download
+                  </Button>
+                </div>
+                <ScrollArea className="h-[400px]">
+                  {(() => {
+                    const combinedText = jobDetail.chunks
+                      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+                      .map(c => c.chunkText || '')
+                      .filter(t => t.length > 0)
+                      .join('\n\n') || jobDetail.document.globalState?.stitchedDocument;
+                    
+                    if (combinedText && combinedText.length > 0) {
+                      return (
+                        <pre className="text-sm whitespace-pre-wrap p-4 bg-muted rounded">
+                          {combinedText}
+                        </pre>
+                      );
+                    }
+                    return <p className="text-center text-muted-foreground py-8">No output available yet</p>;
+                  })()}
+                </ScrollArea>
+              </TabsContent>
+              
+              <TabsContent value="chunks" className="mt-4">
+                <ScrollArea className="h-[400px]">
+                  {jobDetail.chunks.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No chunks saved</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {jobDetail.chunks
+                        .sort((a, b) => a.chunkIndex - b.chunkIndex)
+                        .map((chunk, idx) => (
+                        <Card key={chunk.id} className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant="outline">Chunk {chunk.chunkIndex + 1}</Badge>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(chunk.chunkText || '');
+                                  toast({ title: "Copied!", description: `Chunk ${chunk.chunkIndex + 1} copied` });
+                                }}
+                                data-testid={`button-copy-chunk-${chunk.chunkIndex}`}
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDate(chunk.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                          {chunk.chunkText ? (
+                            <div className="mb-3">
+                              <pre className="text-sm bg-muted p-2 rounded max-h-64 overflow-y-auto whitespace-pre-wrap">
+                                {chunk.chunkText}
+                              </pre>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">No text content</p>
+                          )}
+                          {chunk.evaluationResult && (
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Evaluation:</p>
+                              <pre className="text-xs bg-muted p-2 rounded max-h-24 overflow-y-auto">
+                                {typeof chunk.evaluationResult === 'string' 
+                                  ? chunk.evaluationResult.slice(0, 500)
+                                  : JSON.stringify(chunk.evaluationResult, null, 2).slice(0, 500)}
+                              </pre>
+                            </div>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
               <TabsContent value="overview" className="mt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -387,67 +520,6 @@ export function JobHistoryPage() {
                     <p className="font-medium">{formatDate(jobDetail.document.createdAt)}</p>
                   </div>
                 </div>
-              </TabsContent>
-              
-              <TabsContent value="chunks" className="mt-4">
-                <ScrollArea className="h-[400px]">
-                  {jobDetail.chunks.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No chunks saved</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {jobDetail.chunks.map((chunk, idx) => (
-                        <Card key={chunk.id} className="p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant="outline">Chunk {chunk.chunkIndex + 1}</Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDate(chunk.createdAt)}
-                            </span>
-                          </div>
-                          {chunk.chunkText && (
-                            <div className="mb-3">
-                              <p className="text-xs font-medium text-muted-foreground mb-1">Input Text:</p>
-                              <pre className="text-sm bg-muted p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap">
-                                {chunk.chunkText.slice(0, 500)}{chunk.chunkText.length > 500 ? '...' : ''}
-                              </pre>
-                            </div>
-                          )}
-                          {chunk.evaluationResult && (
-                            <div>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">Evaluation Result:</p>
-                              <pre className="text-xs bg-muted p-2 rounded max-h-32 overflow-y-auto">
-                                {typeof chunk.evaluationResult === 'string' 
-                                  ? chunk.evaluationResult.slice(0, 300)
-                                  : JSON.stringify(chunk.evaluationResult, null, 2).slice(0, 300)}
-                              </pre>
-                            </div>
-                          )}
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-              </TabsContent>
-              
-              <TabsContent value="output" className="mt-4">
-                <ScrollArea className="h-[400px]">
-                  {jobDetail.type === 'reconstruction' ? (
-                    jobDetail.document.reconstructedText ? (
-                      <pre className="text-sm whitespace-pre-wrap p-4 bg-muted rounded">
-                        {jobDetail.document.reconstructedText}
-                      </pre>
-                    ) : (
-                      <p className="text-center text-muted-foreground py-8">No output yet</p>
-                    )
-                  ) : (
-                    jobDetail.document.globalState?.stitchedDocument ? (
-                      <pre className="text-sm whitespace-pre-wrap p-4 bg-muted rounded">
-                        {jobDetail.document.globalState.stitchedDocument}
-                      </pre>
-                    ) : (
-                      <p className="text-center text-muted-foreground py-8">No stitched output available</p>
-                    )
-                  )}
-                </ScrollArea>
               </TabsContent>
             </Tabs>
           ) : (
