@@ -5,12 +5,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import HomePage from "@/pages/HomePage";
 import TranslationPage from "@/pages/TranslationPage";
-
 import WebSearchPage from "@/pages/WebSearchPage";
-
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
+import JobHistoryPage from "@/pages/JobHistoryPage";
 import NotFound from "@/pages/not-found";
-import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2 } from "lucide-react";
+import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, History } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useState, createContext, useContext } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -205,6 +204,14 @@ function Navigation() {
             <Mail className="h-4 w-4" />
             <span>Contact Us</span>
           </a>
+          <Link 
+            href="/job-history" 
+            className="flex items-center gap-2 hover:underline text-sm bg-primary-foreground/10 px-3 py-1.5 rounded-md"
+            data-testid="link-job-history"
+          >
+            <History className="h-4 w-4" />
+            <span>Job History</span>
+          </Link>
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
@@ -270,7 +277,7 @@ function Router({ resetKey }: { resetKey: number }) {
       <Switch key={resetKey}>
         <Route path="/" component={HomePage} />
         <Route path="/analytics" component={AnalyticsPage} />
-
+        <Route path="/job-history" component={JobHistoryPage} />
         <Route component={NotFound} />
       </Switch>
     </>

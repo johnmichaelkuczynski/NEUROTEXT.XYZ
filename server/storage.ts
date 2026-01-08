@@ -71,6 +71,11 @@ export interface IStorage {
   createReconstructionProject(project: any): Promise<any>;
   getReconstructionProject(id: number): Promise<any>;
   updateReconstructionProject(id: number, updates: any): Promise<any>;
+  
+  // Job History operations
+  getAllJobs(): Promise<any[]>;
+  getJobWithChunks(documentId: string): Promise<{ document: any; chunks: any[] } | null>;
+  getJobChunks(documentId: string): Promise<any[]>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -312,6 +317,107 @@ export class DatabaseStorage implements IStorage {
     const { reconstructionProjects } = await import("@shared/schema");
     const [result] = await db.update(reconstructionProjects).set(updates).where(eq(reconstructionProjects.id, id)).returning();
     return result;
+  }
+
+  // Job History operations
+  async getAllJobs(): Promise<any[]> {
+    const { coherenceDocuments, coherenceChunks, reconstructionProjects } = await import("@shared/schema");
+    const { desc, sql, count } = await import("drizzle-orm");
+    
+    // Get coherence documents with chunk counts
+    const coherenceDocs = await db
+      .select({
+        id: coherenceDocuments.id,
+        documentId: coherenceDocuments.documentId,
+        coherenceMode: coherenceDocuments.coherenceMode,
+        globalState: coherenceDocuments.globalState,
+        createdAt: coherenceDocuments.createdAt,
+        updatedAt: coherenceDocuments.updatedAt,
+      })
+      .from(coherenceDocuments)
+      .orderBy(desc(coherenceDocuments.createdAt));
+    
+    // Get chunk counts for each document
+    const jobsWithCounts = await Promise.all(
+      coherenceDocs.map(async (doc) => {
+        const chunks = await db
+          .select()
+          .from(coherenceChunks)
+          .where(eq(coherenceChunks.documentId, doc.documentId));
+        
+        // Determine status based on chunks and timing
+        const lastChunkTime = chunks.length > 0 
+          ? Math.max(...chunks.map(c => new Date(c.createdAt).getTime()))
+          : new Date(doc.createdAt).getTime();
+        const timeSinceLastActivity = Date.now() - lastChunkTime;
+        const hasStitchedOutput = (doc.globalState as any)?.stitchedDocument;
+        
+        let status = 'completed';
+        if (!hasStitchedOutput && chunks.length > 0) {
+          status = timeSinceLastActivity > 30000 ? 'interrupted' : 'in-progress';
+        } else if (chunks.length === 0) {
+          status = timeSinceLastActivity > 30000 ? 'interrupted' : 'in-progress';
+        }
+        
+        return {
+          ...doc,
+          type: 'coherence',
+          chunkCount: chunks.length,
+          status,
+          lastActivity: new Date(lastChunkTime),
+        };
+      })
+    );
+    
+    // Get reconstruction projects
+    const reconstructions = await db
+      .select()
+      .from(reconstructionProjects)
+      .orderBy(desc(reconstructionProjects.createdAt));
+    
+    const reconstructionJobs = reconstructions.map(r => ({
+      ...r,
+      documentId: `reconstruction-${r.id}`,
+      type: 'reconstruction',
+      chunkCount: 0,
+      coherenceMode: 'reconstruction',
+      lastActivity: r.createdAt,
+    }));
+    
+    // Combine and sort by date
+    const allJobs = [...jobsWithCounts, ...reconstructionJobs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    return allJobs;
+  }
+
+  async getJobWithChunks(documentId: string): Promise<{ document: any; chunks: any[] } | null> {
+    const { coherenceDocuments, coherenceChunks } = await import("@shared/schema");
+    
+    const [document] = await db
+      .select()
+      .from(coherenceDocuments)
+      .where(eq(coherenceDocuments.documentId, documentId));
+    
+    if (!document) return null;
+    
+    const chunks = await db
+      .select()
+      .from(coherenceChunks)
+      .where(eq(coherenceChunks.documentId, documentId))
+      .orderBy(coherenceChunks.chunkIndex);
+    
+    return { document, chunks };
+  }
+
+  async getJobChunks(documentId: string): Promise<any[]> {
+    const { coherenceChunks } = await import("@shared/schema");
+    
+    return await db
+      .select()
+      .from(coherenceChunks)
+      .where(eq(coherenceChunks.documentId, documentId))
+      .orderBy(coherenceChunks.chunkIndex);
   }
 }
 

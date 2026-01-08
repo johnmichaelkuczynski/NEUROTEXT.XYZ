@@ -1566,6 +1566,71 @@ ${externalKnowledge}`;
     }
   });
 
+  // Job History API endpoints
+  app.get("/api/jobs", async (req: Request, res: Response) => {
+    try {
+      const jobs = await storage.getAllJobs();
+      res.json({ jobs });
+    } catch (error: any) {
+      console.error("Error fetching jobs:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/jobs/:documentId", async (req: Request, res: Response) => {
+    try {
+      const { documentId } = req.params;
+      
+      // Handle reconstruction jobs
+      if (documentId.startsWith('reconstruction-')) {
+        const id = parseInt(documentId.replace('reconstruction-', ''));
+        const project = await storage.getReconstructionProject(id);
+        if (!project) return res.status(404).json({ error: "Job not found" });
+        return res.json({ document: project, chunks: [], type: 'reconstruction' });
+      }
+      
+      // Handle coherence jobs
+      const jobData = await storage.getJobWithChunks(documentId);
+      if (!jobData) return res.status(404).json({ error: "Job not found" });
+      res.json({ ...jobData, type: 'coherence' });
+    } catch (error: any) {
+      console.error("Error fetching job:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/jobs/:documentId/resume", async (req: Request, res: Response) => {
+    try {
+      const { documentId } = req.params;
+      const { originalText, coherenceMode, customInstructions } = req.body;
+      
+      // Get existing job data
+      const jobData = await storage.getJobWithChunks(documentId);
+      if (!jobData) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+      
+      const { document, chunks } = jobData;
+      const lastChunkIndex = chunks.length > 0 ? Math.max(...chunks.map(c => c.chunkIndex)) : -1;
+      const globalState = document.globalState;
+      
+      console.log(`[Resume] Resuming job ${documentId} from chunk ${lastChunkIndex + 1}`);
+      
+      res.json({
+        success: true,
+        documentId,
+        resumeFromChunk: lastChunkIndex + 1,
+        existingChunks: chunks.length,
+        globalState,
+        coherenceMode: document.coherenceMode,
+        message: `Ready to resume from chunk ${lastChunkIndex + 1}. Use the coherence endpoint with resumeFrom parameter.`
+      });
+    } catch (error: any) {
+      console.error("Error resuming job:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/case-assessment", async (req: Request, res: Response) => {
     try {
       const { text, provider = "zhi1", context } = req.body;

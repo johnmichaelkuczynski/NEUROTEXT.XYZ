@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ModeToggle from "@/components/ModeToggle";
 import DocumentInput from "@/components/DocumentInput";
 import DocumentResults from "@/components/DocumentResults";
@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Brain, Trash2, FileEdit, Loader2, Zap, Clock, Sparkles, Download, Shield, ShieldCheck, RefreshCw, Upload, FileText, BookOpen, BarChart3, AlertCircle, FileCode, Search, Copy, CheckCircle, Target, ChevronUp, ChevronDown, MessageSquareWarning, Circle, ArrowRight, Settings, ScanText, X } from "lucide-react";
+import { Brain, Trash2, FileEdit, Loader2, Zap, Clock, Sparkles, Download, Shield, ShieldCheck, RefreshCw, Upload, FileText, BookOpen, BarChart3, AlertCircle, FileCode, Search, Copy, CheckCircle, Target, ChevronUp, ChevronDown, MessageSquareWarning, Circle, ArrowRight, Settings, ScanText, X, Play } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { analyzeDocument, compareDocuments, checkForAI } from "@/lib/analysis";
 import { AnalysisMode, DocumentInput as DocumentInputType, AIDetectionResult, DocumentAnalysis, DocumentComparison } from "@/lib/types";
@@ -306,6 +306,40 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   const [detectedCoherenceType, setDetectedCoherenceType] = useState<string | null>(null);
   const [coherenceUseStreaming, setCoherenceUseStreaming] = useState(false);
   const [coherenceStreamingActive, setCoherenceStreamingActive] = useState(false);
+  const [resumeJobData, setResumeJobData] = useState<{
+    documentId: string;
+    coherenceMode: string;
+    resumeFromChunk: number;
+    globalState: any;
+    existingChunks: number;
+  } | null>(null);
+  
+  // Check for resume job data on mount
+  useEffect(() => {
+    const storedResumeData = sessionStorage.getItem('resumeJob');
+    if (storedResumeData) {
+      try {
+        const parsed = JSON.parse(storedResumeData);
+        setResumeJobData(parsed);
+        // Set coherence type from saved mode
+        if (parsed.coherenceMode) {
+          setCoherenceType(parsed.coherenceMode as any);
+        }
+        toast({
+          title: "Resume Job Available",
+          description: `Found interrupted job with ${parsed.existingChunks} chunks. Click "Resume Job" to continue.`,
+        });
+      } catch (e) {
+        console.error("Error parsing resume data:", e);
+        sessionStorage.removeItem('resumeJob');
+      }
+    }
+  }, []);
+  
+  const dismissResumeJob = () => {
+    sessionStorage.removeItem('resumeJob');
+    setResumeJobData(null);
+  };
   
   // Reconstruction operations
   const [reconstructionInputText, setReconstructionInputText] = useState<string>("");
@@ -5753,6 +5787,52 @@ Generated on: ${new Date().toLocaleString()}`;
               Evaluate logical, scientific, thematic, instructional, or motivational coherence - then get rewrites that maximize it
             </p>
           </div>
+
+          {/* Resume Job Banner */}
+          {resumeJobData && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-lg" id="coherence-meter">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-6 h-6 text-amber-600" />
+                  <div>
+                    <h3 className="font-semibold text-amber-800 dark:text-amber-200">
+                      Interrupted Job Found
+                    </h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      Mode: {resumeJobData.coherenceMode?.replace(/-/g, ' ')} | 
+                      Chunks saved: {resumeJobData.existingChunks} | 
+                      Resume from chunk: {resumeJobData.resumeFromChunk + 1}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={dismissResumeJob}
+                    className="border-amber-400"
+                    data-testid="button-dismiss-resume"
+                  >
+                    Dismiss
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={() => {
+                      toast({
+                        title: "Resume Ready",
+                        description: "Paste your original text and click Analyze/Rewrite. The system will continue from the saved state.",
+                      });
+                    }}
+                    data-testid="button-resume-ready"
+                  >
+                    <Play className="w-4 h-4 mr-1" />
+                    Resume Job
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Input Area */}
           <div className="mb-6">
