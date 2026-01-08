@@ -307,6 +307,56 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   const [coherenceUseStreaming, setCoherenceUseStreaming] = useState(false);
   const [coherenceStreamingActive, setCoherenceStreamingActive] = useState(false);
   
+  // Reconstruction operations
+  const [reconstructionTargetWordCount, setReconstructionTargetWordCount] = useState<string>("500");
+  const [reconstructionTitle, setReconstructionTitle] = useState<string>("");
+  const [reconstructionLoading, setReconstructionLoading] = useState(false);
+  const [reconstructionProject, setReconstructionProject] = useState<any>(null);
+  const [showReconstructionResults, setShowReconstructionResults] = useState(false);
+
+  const startReconstruction = async () => {
+    if (!documentA.content.trim()) {
+      toast({
+        title: "Input required",
+        description: "Please provide text to reconstruct.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setReconstructionLoading(true);
+    try {
+      const response = await fetch("/api/reconstruction/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: documentA.content,
+          title: reconstructionTitle,
+          targetWordCount: parseInt(reconstructionTargetWordCount),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to start reconstruction");
+      
+      const project = await response.json();
+      setReconstructionProject(project);
+      setShowReconstructionResults(true);
+      
+      toast({
+        title: "Reconstruction Started",
+        description: "Project created successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setReconstructionLoading(false);
+    }
+  };
+
   // Content Analysis State
   const [contentAnalysisResult, setContentAnalysisResult] = useState<{
     richnessScore: number;
