@@ -11,6 +11,16 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { 
+  logLLMCall, 
+  logChunkProcessing, 
+  createJobHistoryEntry, 
+  updateJobHistoryStatus,
+  summarizeText,
+  countWords 
+} from "./auditService";
+import { db } from "../db";
+import { coherenceChunks } from "@shared/schema";
 
 interface ExpansionRequest {
   text: string;
@@ -431,6 +441,19 @@ Write the section content now (do NOT include the section title "${sectionName}"
   });
 
   const content = response.content[0].type === 'text' ? response.content[0].text : '';
+
+  // Log individual section generation
+  await logLLMCall({
+    jobType: 'universal_expansion',
+    modelName: 'claude-sonnet-4-20250514',
+    provider: 'anthropic',
+    promptSummary: `Generate section: ${sectionName}`,
+    promptFull: prompt,
+    responseSummary: summarizeText(content),
+    responseFull: content,
+    status: 'success'
+  });
+
   return content;
 }
 
@@ -517,6 +540,19 @@ Return a comprehensive outline that will ensure argumentative coherence across t
   });
   
   const fullOutline = outlineResponse.content[0].type === 'text' ? outlineResponse.content[0].text : '';
+
+  // Log outline generation
+  await logLLMCall({
+    jobType: 'universal_expansion',
+    modelName: 'claude-sonnet-4-20250514',
+    provider: 'anthropic',
+    promptSummary: 'Generate dissertation outline',
+    promptFull: outlinePrompt,
+    responseSummary: summarizeText(fullOutline),
+    responseFull: fullOutline,
+    status: 'success'
+  });
+
   console.log(`[Universal Expansion] Outline generated (${fullOutline.length} chars)`);
   
   // Stream outline if callback provided
@@ -547,6 +583,30 @@ Return a comprehensive outline that will ensure argumentative coherence across t
       parsed,
       customInstructions
     );
+
+    // PERSIST CHUNK TO DATABASE IMMEDIATELY
+    try {
+      const docIdForDb = `ue-${startTime}-${i}`;
+      await db.insert(coherenceChunks).values({
+        documentId: docIdForDb,
+        coherenceMode: 'philosophical',
+        chunkIndex: i,
+        chunkText: sectionContent,
+        evaluationResult: { status: 'preserved', wordCount: countWords(sectionContent) },
+        stateAfter: { mode: 'philosophical', core_concepts: { section: section.name } }
+      });
+
+      await logChunkProcessing({
+        jobType: 'universal_expansion',
+        chunkIndex: i,
+        inputWordCount: countWords(text),
+        outputWordCount: countWords(sectionContent),
+        targetWordCount: section.wordCount,
+        passed: true
+      });
+    } catch (dbError) {
+      console.error(`[Universal Expansion] Failed to persist chunk ${i} to database:`, dbError);
+    }
     
     // Clean output - no decorative separators
     // Always prepend section title (LLM instructed not to include it)
