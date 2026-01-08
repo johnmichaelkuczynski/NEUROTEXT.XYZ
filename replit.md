@@ -41,6 +41,14 @@ The application employs a monorepo structure, separating client and server compo
         - **Constraint handling**: Respects academic register, no bullet points, subsection requirements
         - **Section-by-section generation**: Creates outline first, then generates each section with coherence context
         - Example: 165-word input + "EXPAND TO 20,000 WORDS" → produces full 20,000-word thesis with specified structure
+        - **Word Count Enforcement with Coherent Continuations** (Jan 2026): Ensures documents ALWAYS meet target word counts:
+            - After initial chunk processing, checks if cumulative word count < targetMinWords
+            - If shortfall detected, reads all existing content from database for context
+            - Generates coherent continuation chunks (up to 15 attempts, ~4000 words each)
+            - Each continuation reads last ~2000 words for seamless continuation
+            - Continuations saved as database chunks with proper delta/coherence tracking
+            - System accepts 95%+ of target if LLM reaches natural conclusion
+            - Completion message includes: targetMet status, percentage, shortfall amount, failure reasons
     - **Full Suite Pipeline**: One-click execution of Reconstruction, Objections, and Objection-Proof Final Version.
     - **Objections Function**: Generates 25 likely objections with compelling counter-arguments. For large documents (1,200+ words), uses outline-first approach that extracts argument structure first, then generates categorized objections (logical, evidential, practical, audience-specific, methodological) with severity ratings.
     - **Generate Objection-Proof Version (Bullet-Proof Rewrite)**: Rewrites text to preemptively address identified objections. Enhanced with:
