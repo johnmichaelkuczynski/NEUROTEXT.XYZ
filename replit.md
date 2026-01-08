@@ -28,7 +28,11 @@ The application employs a monorepo structure, separating client and server compo
         - **Scientific-Explanatory Coherence Type**: Dual assessment of logical consistency and scientific accuracy, with rewrite function to correct pseudoscientific claims.
     - **Text Model Validator**: Exclusively focused on the RECONSTRUCTION function for conservative charitable interpretation.
     - **AI Chat Assistant**: Provides conversation history and context from the Zhi Database.
-    - **Conservative Reconstruction**: "Charitable Interpretation" mode for generating coherent essays articulating a text's unified argument, with advanced outline-first and cross-chunk strategies for medium and long documents.
+    - **Conservative Reconstruction**: "Charitable Interpretation" mode for generating coherent essays articulating a text's unified argument, with advanced outline-first and cross-chunk strategies for medium and long documents. Features:
+        - **Database-backed projects**: Stores reconstruction projects with status tracking (processing, completed, failed)
+        - **Async processing**: Uses crossChunkReconstruct service with Anthropic Claude for background processing
+        - **Real-time polling**: Frontend polls every 5 seconds for status updates with proper cleanup on unmount
+        - **Supports up to 100,000 words**: Handles large documents through chunked processing
     - **Universal Expansion Service** (Jan 2026): Protocol-based reconstruction that obeys ALL user instructions exactly, regardless of input length. Key features:
         - **No thresholds**: Input length is irrelevant; user instructions are ALWAYS followed
         - **Target word count parsing**: Detects "expand to X words" instructions and delivers exact output

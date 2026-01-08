@@ -308,14 +308,26 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   const [coherenceStreamingActive, setCoherenceStreamingActive] = useState(false);
   
   // Reconstruction operations
+  const [reconstructionInputText, setReconstructionInputText] = useState<string>("");
   const [reconstructionTargetWordCount, setReconstructionTargetWordCount] = useState<string>("500");
   const [reconstructionTitle, setReconstructionTitle] = useState<string>("");
   const [reconstructionLoading, setReconstructionLoading] = useState(false);
   const [reconstructionProject, setReconstructionProject] = useState<any>(null);
   const [showReconstructionResults, setShowReconstructionResults] = useState(false);
+  const [reconstructionPolling, setReconstructionPolling] = useState(false);
+  const reconstructionPollRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (reconstructionPollRef.current) {
+        clearInterval(reconstructionPollRef.current);
+      }
+    };
+  }, []);
 
   const startReconstruction = async () => {
-    if (!documentA.content.trim()) {
+    if (!reconstructionInputText.trim()) {
       toast({
         title: "Input required",
         description: "Please provide text to reconstruct.",
@@ -330,9 +342,9 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: documentA.content,
-          title: reconstructionTitle,
-          targetWordCount: parseInt(reconstructionTargetWordCount),
+          text: reconstructionInputText,
+          title: reconstructionTitle || "Untitled Reconstruction",
+          targetWordCount: parseInt(reconstructionTargetWordCount) || 500,
         }),
       });
 
@@ -344,8 +356,45 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       
       toast({
         title: "Reconstruction Started",
-        description: "Project created successfully.",
+        description: "Processing in background. Results will appear when complete.",
       });
+
+      // Start polling for results
+      setReconstructionPolling(true);
+      if (reconstructionPollRef.current) {
+        clearInterval(reconstructionPollRef.current);
+      }
+      reconstructionPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/reconstruction/${project.id}`);
+          if (statusRes.ok) {
+            const updatedProject = await statusRes.json();
+            setReconstructionProject(updatedProject);
+            if (updatedProject.status === 'completed' || updatedProject.status === 'failed') {
+              if (reconstructionPollRef.current) {
+                clearInterval(reconstructionPollRef.current);
+                reconstructionPollRef.current = null;
+              }
+              setReconstructionPolling(false);
+              if (updatedProject.status === 'completed') {
+                toast({
+                  title: "Reconstruction Complete",
+                  description: `Generated ${updatedProject.reconstructedText?.split(/\s+/).length || 0} words.`,
+                });
+              } else {
+                toast({
+                  title: "Reconstruction Failed",
+                  description: "An error occurred during processing.",
+                  variant: "destructive",
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Polling error:", e);
+        }
+      }, 5000); // Poll every 5 seconds
+      
     } catch (error: any) {
       toast({
         title: "Error",
@@ -5530,6 +5579,145 @@ Generated on: ${new Date().toLocaleString()}`;
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* CONSERVATIVE RECONSTRUCTION - Charitable Interpretation System */}
+      <div className="mt-16 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/10 dark:to-purple-900/10 p-8 rounded-lg border-2 border-violet-200 dark:border-violet-700">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-violet-900 dark:text-violet-100 mb-3 flex items-center justify-center gap-3">
+              <Brain className="w-8 h-8 text-violet-600" />
+              Conservative Reconstruction
+            </h2>
+            <p className="text-lg text-gray-700 dark:text-gray-300 mb-2">
+              Generate coherent essays articulating a text's unified argument through charitable interpretation
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Advanced outline-first and cross-chunk strategies for medium and long documents
+            </p>
+          </div>
+
+          {/* Project Configuration */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-violet-800 dark:text-violet-200">Project Title</Label>
+              <Input 
+                placeholder="Enter a title for this reconstruction project..." 
+                value={reconstructionTitle}
+                onChange={(e) => setReconstructionTitle(e.target.value)}
+                className="border-violet-200 dark:border-violet-700 focus:border-violet-400"
+                data-testid="input-reconstruction-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-violet-800 dark:text-violet-200">Target Word Count</Label>
+              <Input 
+                type="number" 
+                value={reconstructionTargetWordCount}
+                onChange={(e) => setReconstructionTargetWordCount(e.target.value)}
+                placeholder="500"
+                className="border-violet-200 dark:border-violet-700 focus:border-violet-400"
+                data-testid="input-reconstruction-word-count"
+              />
+            </div>
+          </div>
+
+          {/* Input Text Area */}
+          <div className="mb-6">
+            <Label className="block text-sm font-semibold text-violet-800 dark:text-violet-200 mb-2">
+              Source Text for Reconstruction
+            </Label>
+            <Textarea
+              value={reconstructionInputText}
+              onChange={(e) => setReconstructionInputText(e.target.value)}
+              placeholder="Paste your text here for conservative reconstruction. The system will generate a coherent essay that articulates the unified argument through charitable interpretation..."
+              className="min-h-[200px] border-violet-200 dark:border-violet-700 focus:border-violet-400"
+              data-testid="textarea-reconstruction-input"
+            />
+            {reconstructionInputText && (
+              <p className="text-xs text-violet-600 dark:text-violet-400 mt-1">
+                {reconstructionInputText.split(/\s+/).filter(w => w).length} words
+              </p>
+            )}
+          </div>
+
+          {/* Action Button */}
+          <Button 
+            onClick={startReconstruction} 
+            className="w-full py-6 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-semibold text-lg"
+            disabled={reconstructionLoading || reconstructionPolling || !reconstructionInputText.trim()}
+            data-testid="button-start-reconstruction"
+          >
+            {reconstructionLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Processing Conservative Reconstruction...
+              </>
+            ) : (
+              <>
+                <Brain className="w-5 h-5 mr-2" />
+                Start Conservative Reconstruction
+              </>
+            )}
+          </Button>
+
+          {/* Results Display */}
+          {showReconstructionResults && reconstructionProject && (
+            <div className="mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg border-2 border-violet-300 dark:border-violet-700">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-violet-900 dark:text-violet-100 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-violet-600" />
+                  Reconstruction Project: {reconstructionProject.title}
+                </h3>
+                <Badge variant="outline" className={`${
+                  reconstructionProject.status === 'completed' ? 'bg-green-100 text-green-700 border-green-300' :
+                  reconstructionProject.status === 'processing' ? 'bg-amber-100 text-amber-700 border-amber-300' :
+                  'bg-gray-100 text-gray-700 border-gray-300'
+                }`}>
+                  {reconstructionProject.status}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <div>
+                  <span className="font-medium">Target Word Count:</span> {reconstructionProject.targetWordCount}
+                </div>
+                <div>
+                  <span className="font-medium">Project ID:</span> {reconstructionProject.id}
+                </div>
+              </div>
+              {reconstructionProject.status === 'processing' && (
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>The reconstruction is being processed. Results will appear here when complete.</span>
+                </div>
+              )}
+              {reconstructionProject.reconstructedText && (
+                <div className="mt-4">
+                  <Label className="block text-sm font-semibold text-violet-800 dark:text-violet-200 mb-2">
+                    Reconstructed Output
+                  </Label>
+                  <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded border border-gray-200 dark:border-gray-700 max-h-[400px] overflow-y-auto">
+                    <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 dark:text-gray-200">
+                      {reconstructionProject.reconstructedText}
+                    </pre>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <CopyButton text={reconstructionProject.reconstructedText} />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadText(reconstructionProject.reconstructedText, `reconstruction-${reconstructionProject.id}.txt`)}
+                      data-testid="button-download-reconstruction"
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      Download
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

@@ -1494,10 +1494,15 @@ ${externalKnowledge}`;
     }
   });
 
-  // Case assessment endpoint - REAL-TIME STREAMING
+  // Conservative Reconstruction endpoint - creates project and triggers processing
   app.post("/api/reconstruction/start", async (req: Request, res: Response) => {
     try {
-      const { text, title, targetWordCount } = req.body;
+      const { text, title, targetWordCount, customInstructions } = req.body;
+      
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        return res.status(400).json({ error: "Text content is required for reconstruction" });
+      }
+      
       const userId = (req.user as any)?.id;
       const project = await storage.createReconstructionProject({
         userId,
@@ -1506,8 +1511,38 @@ ${externalKnowledge}`;
         targetWordCount: targetWordCount || 500,
         status: "processing"
       });
+      
+      console.log(`[Reconstruction] Created project ${project.id}: "${project.title}" (${text.split(/\s+/).length} words)`);
+      
+      // Trigger async reconstruction processing
+      (async () => {
+        try {
+          const { crossChunkReconstruct } = await import('./services/crossChunkCoherence');
+          
+          const result = await crossChunkReconstruct(
+            text,
+            customInstructions || `Expand to approximately ${targetWordCount} words while preserving the original argument structure.`,
+            'anthropic'
+          );
+          
+          // Update project with results
+          await storage.updateReconstructionProject(project.id, {
+            reconstructedText: result.stitchedDocument,
+            status: 'completed'
+          });
+          
+          console.log(`[Reconstruction] Completed project ${project.id}: ${result.stitchedDocument.split(/\s+/).length} words`);
+        } catch (error: any) {
+          console.error(`[Reconstruction] Failed project ${project.id}:`, error.message);
+          await storage.updateReconstructionProject(project.id, {
+            status: 'failed'
+          });
+        }
+      })();
+      
       res.json(project);
     } catch (error: any) {
+      console.error("Error starting reconstruction:", error);
       res.status(500).json({ error: error.message });
     }
   });
