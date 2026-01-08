@@ -9,9 +9,11 @@ import WebSearchPage from "@/pages/WebSearchPage";
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import JobHistoryPage from "@/pages/JobHistoryPage";
 import NotFound from "@/pages/not-found";
-import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, History } from "lucide-react";
+import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, History, Eye, Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useState, createContext, useContext } from "react";
+import { ActiveJobProvider, useActiveJob } from "@/contexts/ActiveJobContext";
+import { JobViewerModal } from "@/components/JobViewerModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,6 +190,7 @@ function Navigation() {
   const { user, logoutMutation } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const { activeJob, openViewer } = useActiveJob();
 
   return (
     <nav className="bg-primary text-primary-foreground py-4">
@@ -212,6 +215,19 @@ function Navigation() {
             <History className="h-4 w-4" />
             <span>Job History</span>
           </Link>
+          {activeJob && activeJob.isProcessing && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openViewer}
+              className="flex items-center gap-2 text-primary-foreground bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-md animate-pulse"
+              data-testid="button-view-current-job"
+            >
+              <Eye className="h-4 w-4" />
+              <span>View Current Job</span>
+              <Loader2 className="h-3 w-3 animate-spin" />
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
@@ -305,12 +321,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ResetContext.Provider value={{ resetAll }}>
-          <TooltipProvider>
-            <Toaster />
-            <Router resetKey={resetKey} />
-          </TooltipProvider>
-        </ResetContext.Provider>
+        <ActiveJobProvider>
+          <ResetContext.Provider value={{ resetAll }}>
+            <TooltipProvider>
+              <Toaster />
+              <Router resetKey={resetKey} />
+              <JobViewerModal />
+            </TooltipProvider>
+          </ResetContext.Provider>
+        </ActiveJobProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

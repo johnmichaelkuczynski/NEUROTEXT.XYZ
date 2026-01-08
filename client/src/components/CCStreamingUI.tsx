@@ -4,8 +4,9 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Play, Square, CheckCircle, AlertCircle, Clock, FileText, Copy, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Play, Square, CheckCircle, AlertCircle, Clock, FileText, Copy, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useActiveJob } from '@/contexts/ActiveJobContext';
 
 interface ChunkResult {
   chunkIndex: number;
@@ -48,6 +49,7 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [estimatedRemaining, setEstimatedRemaining] = useState(0);
   const [jobId, setJobId] = useState<number | null>(null);
+  const [documentId, setDocumentId] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   
   // Chunk popup state - queue of chunks waiting to be shown
@@ -61,6 +63,7 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const { toast } = useToast();
+  const { setActiveJob, updateActiveJob, clearActiveJob, openViewer } = useActiveJob();
 
   const countWords = (t: string) => t.trim().split(/\s+/).filter(w => w).length;
 
@@ -213,11 +216,21 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
     switch (data.type) {
       case 'job_started':
         setJobId(data.jobId);
+        setDocumentId(data.documentId);
         setTotalChunks(data.totalChunks);
         setInputWords(data.inputWords);
         setTargetWords(data.targetWords);
         setLengthMode(data.lengthMode);
         setMessage(`Job started: ${data.totalChunks} chunks to process`);
+        setActiveJob({
+          jobId: String(data.jobId),
+          documentId: data.documentId,
+          coherenceMode: 'reconstruction',
+          isProcessing: true,
+          phase: 'chunk_processing',
+          totalChunks: data.totalChunks,
+          completedChunks: 0
+        });
         break;
 
       case 'progress':
@@ -249,6 +262,7 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
         setWordsProcessed(data.runningTotal);
         setProjectedFinal(data.projectedFinal);
         setMessage(`Chunk ${data.chunkIndex + 1}/${data.totalChunks} complete: ${data.actualWords} words (target: ${data.targetWords})`);
+        updateActiveJob({ completedChunks: data.chunkIndex + 1 });
         break;
 
       case 'warning':
@@ -259,6 +273,7 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
         setPhase('complete');
         setMessage('Processing complete!');
         stopTimer();
+        clearActiveJob();
         onComplete(data.finalOutput, {
           inputWords: inputWords,
           outputWords: data.finalWordCount,
@@ -273,6 +288,7 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
         setPhase('failed');
         setMessage(`Job failed: ${data.error}`);
         stopTimer();
+        clearActiveJob();
         onError(data.error);
         break;
 
@@ -429,10 +445,16 @@ export function CCStreamingUI({ text, customInstructions, onComplete, onError }:
                 </Button>
               )}
               {isProcessing && (
-                <Button variant="destructive" onClick={abortJob} data-testid="button-abort-cc-stream">
-                  <Square className="w-4 h-4 mr-2" />
-                  Abort
-                </Button>
+                <>
+                  <Button variant="outline" onClick={openViewer} data-testid="button-view-output">
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Output
+                  </Button>
+                  <Button variant="destructive" onClick={abortJob} data-testid="button-abort-cc-stream">
+                    <Square className="w-4 h-4 mr-2" />
+                    Abort
+                  </Button>
+                </>
               )}
             </div>
           </div>

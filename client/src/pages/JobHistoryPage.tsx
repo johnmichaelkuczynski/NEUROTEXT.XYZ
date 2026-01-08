@@ -19,6 +19,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useActiveJob } from '@/contexts/ActiveJobContext';
 import { 
   History, 
   RefreshCw, 
@@ -72,6 +73,7 @@ export function JobHistoryPage() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [resuming, setResuming] = useState<string | null>(null);
   const { toast } = useToast();
+  const { viewJob } = useActiveJob();
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -297,7 +299,7 @@ export function JobHistoryPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => fetchJobDetail(job)}
+                          onClick={() => viewJob(job.documentId)}
                           data-testid={`button-view-${job.documentId}`}
                         >
                           <Eye className="w-4 h-4" />

@@ -57,6 +57,15 @@ The application employs a monorepo structure, separating client and server compo
             - **Direct Format Rewrite**: Bypasses section-based processing for special formats (glossaries, lists) to respect exact formatting requirements
     - **Global Coherence State (GCS) System**: Architectural overhaul for coherence tracking across chunks, with mode-specific state dimensions for 8 coherence types.
     - **TextStats Component with AI Detection**: Displays word/character counts and GPTZero-powered AI detection results.
+    - **Job History System** (Jan 2026): Persistent tracking and viewing of processing jobs. Features:
+        - **Database-backed job storage**: Jobs stored in reconstruction_projects, coherence_documents, coherence_chunks tables
+        - **Job History Page**: Accessible from navigation, shows all jobs with status (completed, in-progress, interrupted)
+        - **Persistent Job Viewer Modal**: Content always accessible during and after processing via shared modal
+        - **Active Job Context**: Tracks current processing job with sessionStorage persistence
+        - **View Current Job Button**: Appears in header during active processing
+        - **Resume Functionality**: Interrupted jobs can be resumed from where they stopped
+        - **Auto-refresh**: Viewer polls every 3 seconds for in-progress jobs
+        - **Copy/Download**: Always available for generated content in the viewer
 
 ## External Dependencies
 - **AI Service Providers**: OpenAI API (GPT-4), Anthropic API (Claude), DeepSeek API, Perplexity AI, Grok API (xAI).
