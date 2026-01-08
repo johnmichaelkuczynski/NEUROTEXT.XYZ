@@ -1,0 +1,209 @@
+NeuroText Audit System Specification
+Core Principle
+NeuroText is not allowed to silently "process" and then deposit a finished output.
+If it does, it will cheat: skip database writes, run in-memory only, truncate output, ignore the coherence pipeline, or claim it used the DB when it didn't.
+So from now on, every operation must run in Full Audit Mode, and every operation must produce two outputs:
+
+OUTPUT 1: The User's Requested Output
+Whatever the user asked for (reconstruction, rewrite, analysis, etc.)
+OUTPUT 2: A Permanent, Streaming Audit Log
+A complete record of every single action the system took to produce that output.
+
+Audit Log Requirements
+A) Real-Time Streaming (During Generation)
+Whenever the user triggers ANY operation, the app must:
+
+Immediately open a live Audit Panel (popup/side-panel)
+Stream every action in real time, line by line, as it happens
+Never hide anything — if it's not in the log, it didn't happen
+
+The stream must show:
+
+Every database query (actual SQL text)
+Every table accessed (which table, read or write)
+Every row inserted (table name, row ID, key fields)
+Every row updated (table name, row ID, what changed)
+Every LLM call made:
+
+Model name
+Token count (input/output)
+Prompt summary (first 200 chars or redacted)
+Response summary (first 200 chars)
+Latency (ms)
+
+
+Every chunk processed:
+
+Chunk index
+Input word count
+Output word count
+Target word count
+Pass/fail status
+
+
+Every skeleton extraction
+Every delta recorded
+Every stitch operation
+Every repair attempt
+Every error encountered (with full error text)
+Timestamps for every action
+
+B) The Log Must Be Accessible
+The user must be able to:
+
+Watch it live as it streams
+Scroll back through the log during generation
+Copy any portion of the log
+Download the full log as a file (JSON or TXT)
+Access it after completion — it stays visible until dismissed
+Retrieve it later from their account
+
+C) Permanent Storage
+Every audit log must be:
+
+Stored in the database immediately as events occur
+Linked to the user's account
+Linked to the output it produced
+Accessible from a "Job History" or "Audit Logs" section
+Never deleted (or only after explicit user action)
+
+
+Database Schema Addition
+sqlCREATE TABLE audit_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) NOT NULL,
+  job_type TEXT NOT NULL, -- 'reconstruction', 'rewrite', 'analysis', etc.
+  job_id INTEGER, -- FK to relevant job table
+  started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMP,
+  status TEXT DEFAULT 'running', -- running, completed, failed
+  final_output_preview TEXT, -- first 500 chars of output
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE audit_log_entries (
+  id SERIAL PRIMARY KEY,
+  audit_log_id INTEGER REFERENCES audit_logs(id) NOT NULL,
+  sequence_num INTEGER NOT NULL, -- ordering within the log
+  timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+  event_type TEXT NOT NULL, -- 'db_query', 'db_insert', 'db_update', 'llm_call', 'chunk_process', 'error', etc.
+  event_data JSONB NOT NULL, -- full details of the event
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_log_entries_audit_log_id ON audit_log_entries(audit_log_id);
+
+Event Types and Required Data
+db_query
+json{
+  "sql": "SELECT * FROM reconstruction_documents WHERE id = $1",
+  "params": [42],
+  "table": "reconstruction_documents",
+  "operation": "SELECT",
+  "rows_returned": 1,
+  "duration_ms": 12
+}
+db_insert
+json{
+  "table": "reconstruction_chunks",
+  "row_id": 156,
+  "key_fields": {"document_id": 42, "chunk_index": 3},
+  "duration_ms": 8
+}
+db_update
+json{
+  "table": "reconstruction_documents",
+  "row_id": 42,
+  "fields_updated": ["status", "current_chunk"],
+  "new_values": {"status": "chunking", "current_chunk": 3},
+  "duration_ms": 5
+}
+llm_call
+json{
+  "model": "gpt-4",
+  "purpose": "chunk_generation",
+  "chunk_index": 3,
+  "input_tokens": 2847,
+  "output_tokens": 1203,
+  "prompt_preview": "You are generating chunk 3 of 8...",
+  "response_preview": "The dialectical method employed by...",
+  "duration_ms": 4521
+}
+chunk_processed
+json{
+  "chunk_index": 3,
+  "input_words": 1400,
+  "output_words": 1387,
+  "target_words": 1400,
+  "within_tolerance": true,
+  "claims_addressed": ["c4", "c5"],
+  "violations": []
+}
+skeleton_extracted
+json{
+  "claims_count": 12,
+  "terms_count": 8,
+  "structural_requirements": 3,
+  "total_target_words": 12000
+}
+stitch_pass
+json{
+  "coherence_score": "needs_repair",
+  "claims_covered": 10,
+  "claims_missing": 2,
+  "topic_violations": 1,
+  "repairs_needed": 2
+}
+error
+json{
+  "error_type": "LLM_TIMEOUT",
+  "message": "Request timed out after 180000ms",
+  "context": "chunk_generation",
+  "chunk_index": 5,
+  "will_retry": true
+}
+
+UI Requirements
+The Audit Panel
+
+Opens automatically when any job starts
+Docked to the right side or as a resizable popup
+Shows a scrolling log of events as they stream in
+Color-coded by event type:
+
+Green: successful DB operations
+Blue: LLM calls
+Yellow: warnings/retries
+Red: errors
+
+
+Expandable entries: click to see full JSON details
+Controls:
+
+Pause/Resume streaming (for reading)
+Copy All
+Download JSON
+Download TXT
+Clear (only after job completes)
+
+
+
+Job History Page
+
+Lists all past jobs for the user
+Shows: job type, date, status, output preview
+Click to view: full audit log + original output
+Download: both output and audit log
+
+
+Implementation Rule
+If it's not in the audit log, it didn't happen.
+The audit log is not a debugging feature. It is the proof that the system did what it claims.
+If the system says "I wrote to the database," but the audit log shows no db_insert event — the system is lying.
+If the system produces output but the audit log shows zero LLM calls — the system is broken.
+If the user cannot watch the system work live, download the full receipt, and verify every claim — the system is not trustworthy.
+
+Summary
+RequirementStatusReal-time streaming logRequiredVisible during generationRequiredCopyableRequiredDownloadableRequiredStored in databaseRequiredLinked to user accountRequiredAccessible after completionRequiredShows every DB operationRequiredShows every LLM callRequiredShows every chunk processedRequiredShows every errorRequiredShows timestampsRequired
+This is the spec. Adapt it to NeuroText.
