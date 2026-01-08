@@ -217,6 +217,26 @@ export const insertCognitiveProfileSchema = createInsertSchema(cognitiveProfiles
 
 
 
+// Conservative Reconstruction tables
+export const reconstructionProjects = pgTable("reconstruction_projects", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  title: text("title"),
+  originalText: text("original_text").notNull(),
+  reconstructedText: text("reconstructed_text"),
+  status: text("status").notNull().default("pending"),
+  targetWordCount: integer("target_word_count"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertReconstructionProjectSchema = createInsertSchema(reconstructionProjects).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ReconstructionProject = typeof reconstructionProjects.$inferSelect;
+export type InsertReconstructionProject = z.infer<typeof insertReconstructionProjectSchema>;
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

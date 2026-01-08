@@ -66,6 +66,11 @@ export interface IStorage {
   getCreditTransactionByStripeSession(sessionId: string): Promise<CreditTransaction | undefined>;
   updateCreditTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<CreditTransaction>;
   updateCreditTransactionSessionId(id: number, sessionId: string): Promise<CreditTransaction>;
+
+  // Reconstruction operations
+  createReconstructionProject(project: any): Promise<any>;
+  getReconstructionProject(id: number): Promise<any>;
+  updateReconstructionProject(id: number, updates: any): Promise<any>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -288,6 +293,25 @@ export class DatabaseStorage implements IStorage {
       .where(eq(creditTransactions.id, id))
       .returning();
     return updated;
+  }
+
+  // Reconstruction operations
+  async createReconstructionProject(project: any): Promise<any> {
+    const { reconstructionProjects } = await import("@shared/schema");
+    const [result] = await db.insert(reconstructionProjects).values(project).returning();
+    return result;
+  }
+
+  async getReconstructionProject(id: number): Promise<any> {
+    const { reconstructionProjects } = await import("@shared/schema");
+    const [result] = await db.select().from(reconstructionProjects).where(eq(reconstructionProjects.id, id));
+    return result;
+  }
+
+  async updateReconstructionProject(id: number, updates: any): Promise<any> {
+    const { reconstructionProjects } = await import("@shared/schema");
+    const [result] = await db.update(reconstructionProjects).set(updates).where(eq(reconstructionProjects.id, id)).returning();
+    return result;
   }
 }
 
