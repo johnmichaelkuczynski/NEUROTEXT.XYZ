@@ -196,10 +196,10 @@ function Navigation() {
     <nav className="bg-primary text-primary-foreground py-4">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity" data-testid="link-home">
             <img src={neurotextLogo} alt="NEUROTEXT Logo" className="h-16 w-16 rounded-md" />
             <span className="font-bold text-xl">NEUROTEXT</span>
-          </div>
+          </Link>
           <a 
             href="mailto:contact@zhisystems.ai" 
             className="flex items-center gap-2 hover:underline text-sm"

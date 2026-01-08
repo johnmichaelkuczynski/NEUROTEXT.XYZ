@@ -224,6 +224,9 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   const [fullSuiteAdditionalInfo, setFullSuiteAdditionalInfo] = useState("");
   const [fullSuiteObjectionProofOutput, setFullSuiteObjectionProofOutput] = useState("");
   const [fullSuitePopupOpen, setFullSuitePopupOpen] = useState(false);
+  const [fullSuiteReconstructionPopupOpen, setFullSuiteReconstructionPopupOpen] = useState(false);
+  const [fullSuiteObjectionsPopupOpen, setFullSuiteObjectionsPopupOpen] = useState(false);
+  const [fullSuiteReconstructionOutput, setFullSuiteReconstructionOutput] = useState("");
   
   // Refine/Adjust Output State (word count + custom instructions)
   const [refineWordCount, setRefineWordCount] = useState<string>("");
@@ -1398,6 +1401,11 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     setValidatorBatchResults([]);
     setObjectionsOutput("");
     setFullSuiteObjectionProofOutput("");
+    setFullSuiteReconstructionOutput("");
+    // Close any open popups
+    setFullSuiteReconstructionPopupOpen(false);
+    setFullSuiteObjectionsPopupOpen(false);
+    setFullSuitePopupOpen(false);
 
     const allModes = ["reconstruction"];
 
@@ -1454,6 +1462,10 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
       // Use the reconstruction output for objections
       const reconstructionOutput = successfulResults[0]?.output || validatorInputText;
+      
+      // Store and show reconstruction output in popup
+      setFullSuiteReconstructionOutput(reconstructionOutput);
+      setFullSuiteReconstructionPopupOpen(true);
 
       // ============ STAGE 2: OBJECTIONS ============
       setFullSuiteStage("objections");
@@ -1488,6 +1500,10 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       // Also set the objections input text so it can be used in objection-proof
       setObjectionsInputText(reconstructionOutput);
       console.log("[FULL SUITE] Stage 2 complete: Objections generated");
+      
+      // Show objections output in popup (auto-close reconstruction popup)
+      setFullSuiteReconstructionPopupOpen(false);
+      setFullSuiteObjectionsPopupOpen(true);
 
       // ============ STAGE 3: OBJECTION-PROOF VERSION ============
       setFullSuiteStage("objection-proof");
@@ -1520,6 +1536,8 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
       // ============ COMPLETE ============
       setFullSuiteStage("complete");
+      // Auto-close objections popup and open final popup
+      setFullSuiteObjectionsPopupOpen(false);
       setFullSuitePopupOpen(true); // Open the popup modal with final output
       toast({
         title: "Full Suite Complete!",
@@ -8214,7 +8232,141 @@ Generated on: ${new Date().toLocaleString()}`;
         }}
       />
 
-      {/* Full Suite Output Popup Modal */}
+      {/* Full Suite RECONSTRUCTION Popup Modal */}
+      {fullSuiteReconstructionPopupOpen && fullSuiteReconstructionOutput && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" data-testid="full-suite-reconstruction-popup-overlay">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl border-2 border-blue-400 dark:border-blue-600 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+            {/* Popup Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30 rounded-t-lg">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge className="bg-blue-600 text-white text-sm px-3 py-1">
+                  Stage 1: Reconstruction Complete
+                </Badge>
+                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                  {fullSuiteReconstructionOutput.trim().split(/\s+/).length.toLocaleString()} words
+                </Badge>
+                {fullSuiteLoading && (
+                  <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 animate-pulse">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Processing Objections...
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(fullSuiteReconstructionOutput);
+                    toast({ title: "Copied!", description: "Reconstruction output copied to clipboard" });
+                  }}
+                  className="border-blue-300 dark:border-blue-600"
+                  data-testid="button-copy-reconstruction"
+                >
+                  <Copy className="w-4 h-4 mr-1" />
+                  Copy
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setFullSuiteReconstructionPopupOpen(false)}
+                  data-testid="button-close-reconstruction-popup"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            {/* Popup Content */}
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-800 dark:text-gray-200">
+                {fullSuiteReconstructionOutput}
+              </pre>
+            </div>
+            {/* Popup Footer */}
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-b-lg">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <TextStats text={fullSuiteReconstructionOutput} showAiDetect={true} variant="compact" />
+                <Button
+                  onClick={() => setFullSuiteReconstructionPopupOpen(false)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  data-testid="button-done-reconstruction"
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Suite OBJECTIONS Popup Modal */}
+      {fullSuiteObjectionsPopupOpen && objectionsOutput && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" data-testid="full-suite-objections-popup-overlay">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl border-2 border-amber-400 dark:border-amber-600 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+            {/* Popup Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/30 rounded-t-lg">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge className="bg-amber-600 text-white text-sm px-3 py-1">
+                  Stage 2: Objections Complete
+                </Badge>
+                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                  {objectionsOutput.trim().split(/\s+/).length.toLocaleString()} words
+                </Badge>
+                {fullSuiteLoading && (
+                  <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 animate-pulse">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Creating Objection-Proof Version...
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(objectionsOutput);
+                    toast({ title: "Copied!", description: "Objections output copied to clipboard" });
+                  }}
+                  className="border-amber-300 dark:border-amber-600"
+                  data-testid="button-copy-objections"
+                >
+                  <Copy className="w-4 h-4 mr-1" />
+                  Copy
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setFullSuiteObjectionsPopupOpen(false)}
+                  data-testid="button-close-objections-popup"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            {/* Popup Content */}
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-800 dark:text-gray-200">
+                {objectionsOutput}
+              </pre>
+            </div>
+            {/* Popup Footer */}
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-b-lg">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <TextStats text={objectionsOutput} showAiDetect={true} variant="compact" />
+                <Button
+                  onClick={() => setFullSuiteObjectionsPopupOpen(false)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                  data-testid="button-done-objections"
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Suite FINAL Output Popup Modal */}
       {fullSuitePopupOpen && fullSuiteObjectionProofOutput && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" data-testid="full-suite-popup-overlay">
           <div className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl border-2 border-violet-400 dark:border-violet-600 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
