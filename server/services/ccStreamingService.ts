@@ -16,7 +16,8 @@ import {
   reconstructChunkConstrained,
   stitchAndValidate,
   parseTargetLength,
-  calculateLengthConfig
+  calculateLengthConfig,
+  enforceWordCountWithContinuations
 } from './crossChunkCoherence';
 import { logChunkProcessing, logLengthEnforcement, createJobHistoryEntry, updateJobHistoryStatus } from './auditService';
 
@@ -575,6 +576,143 @@ async function processJobAsync(jobId: number): Promise<void> {
       }
     }
     
+    // ============ WORD COUNT ENFORCEMENT ============
+    // If we haven't reached the target, generate coherent continuations
+    const targetMinWords = job.targetMinWords!;
+    
+    if (runningWordCount < targetMinWords) {
+      console.log(`[CC-WS] Word count enforcement triggered: ${runningWordCount} < ${targetMinWords} target`);
+      
+      broadcastProgress(jobId, 'chunk_processing', `Output is ${runningWordCount} words but target is ${targetMinWords}. Generating additional content...`, {
+        wordsProcessed: runningWordCount,
+        targetWords: targetMinWords
+      });
+      
+      // Load all completed chunk output from database
+      const completedChunksForContinuation = await db.select()
+        .from(reconstructionChunks)
+        .where(and(
+          eq(reconstructionChunks.documentId, jobId),
+          eq(reconstructionChunks.status, 'complete')
+        ))
+        .orderBy(asc(reconstructionChunks.chunkIndex));
+      
+      const existingContent = completedChunksForContinuation
+        .map(c => c.chunkOutputText!)
+        .join('\n\n');
+      
+      // Build coherence context from all prior deltas
+      const allDeltas = completedChunksForContinuation
+        .map(c => c.chunkDelta as ChunkDelta)
+        .filter(Boolean);
+      const priorDeltasContext = buildPriorDeltasSummary(allDeltas);
+      
+      // Generate continuations until target is met
+      const MAX_CONTINUATIONS = 15; // Allow up to 15 continuation chunks
+      
+      const enforceResult = await enforceWordCountWithContinuations(
+        existingContent,
+        skeleton as GlobalSkeleton,
+        targetMinWords,
+        priorDeltasContext,
+        MAX_CONTINUATIONS,
+        (msg, currentWords, targetWords) => {
+          broadcastProgress(jobId, 'chunk_processing', msg, {
+            wordsProcessed: currentWords,
+            targetWords: targetWords
+          });
+        }
+      );
+      
+      // Update running word count
+      runningWordCount = enforceResult.finalWordCount;
+      
+      // Store continuation as additional chunks in the database
+      if (enforceResult.continuationsGenerated > 0) {
+        // Calculate continuation text (what was added beyond original chunks)
+        const originalContent = completedChunksForContinuation
+          .map(c => c.chunkOutputText!)
+          .join('\n\n');
+        const continuationText = enforceResult.finalContent
+          .substring(originalContent.length)
+          .trim();
+        
+        if (continuationText) {
+          const continuationWords = countWords(continuationText);
+          const nextChunkIndex = completedChunksForContinuation.length;
+          
+          // Insert continuation chunk into database
+          try {
+            await db.insert(reconstructionChunks).values({
+              documentId: jobId,
+              chunkIndex: nextChunkIndex,
+              chunkInputText: '[CONTINUATION - extending document to meet word count target]',
+              chunkInputWords: 0,
+              chunkOutputText: continuationText,
+              actualWords: continuationWords,
+              targetWords: targetMinWords - (runningWordCount - continuationWords),
+              minWords: 0,
+              maxWords: continuationWords * 2,
+              status: 'complete',
+              chunkDelta: {
+                newClaimsIntroduced: [],
+                termsUsed: [],
+                conflictsDetected: [],
+                ledgerAdditions: []
+              }
+            });
+            
+            console.log(`[CC-WS] Saved continuation chunk (index ${nextChunkIndex}) with ${continuationWords} words`);
+            
+            // Broadcast the continuation as a chunk_complete event
+            broadcastToJob(jobId, {
+              type: 'chunk_complete',
+              jobId,
+              chunkIndex: nextChunkIndex,
+              totalChunks: nextChunkIndex + 1,
+              chunkText: continuationText,
+              actualWords: continuationWords,
+              targetWords: targetMinWords,
+              minWords: 0,
+              maxWords: continuationWords * 2,
+              runningTotal: runningWordCount,
+              projectedFinal: runningWordCount,
+              status: 'continuation'
+            });
+            
+            // Update document chunk count
+            await db.update(reconstructionDocuments)
+              .set({ 
+                numChunks: nextChunkIndex + 1,
+                currentChunk: nextChunkIndex + 1,
+                updatedAt: new Date()
+              })
+              .where(eq(reconstructionDocuments.id, jobId));
+              
+          } catch (dbError: any) {
+            console.error(`[CC-WS] Failed to save continuation chunk:`, dbError.message);
+          }
+        }
+      }
+      
+      // Log enforcement result
+      if (!enforceResult.targetMet && enforceResult.shortfallReason) {
+        console.log(`[CC-WS] Word count enforcement completed with shortfall: ${enforceResult.shortfallReason}`);
+        
+        // Broadcast warning about shortfall
+        broadcastToJob(jobId, {
+          type: 'warning',
+          jobId,
+          message: enforceResult.shortfallReason,
+          projectedFinal: enforceResult.finalWordCount,
+          targetWords: targetMinWords,
+          shortfall: targetMinWords - enforceResult.finalWordCount
+        });
+      } else {
+        console.log(`[CC-WS] Word count enforcement successful: ${runningWordCount} words (target: ${targetMinWords})`);
+      }
+    }
+    
     broadcastProgress(jobId, 'stitching', 'Running global consistency check...');
     
     try {
@@ -634,14 +772,26 @@ async function processJobAsync(jobId: number): Promise<void> {
       console.error(`[DB] FAILED to update reconstructionDocuments with final output:`, dbError.message);
     }
     
+    // Build completion message with clear word count info
+    const targetMet = finalWordCount >= job.targetMinWords!;
+    const shortfall = targetMet ? 0 : job.targetMinWords! - finalWordCount;
+    const percentage = Math.round((finalWordCount / job.targetMinWords!) * 100);
+    
     broadcastToJob(jobId, {
       type: 'job_complete',
       jobId,
       finalOutput,
       finalWordCount,
-      targetWords: job.targetMidWords,
+      targetWords: job.targetMinWords,
+      targetMet,
+      shortfall,
+      percentage,
       stitchResult,
-      timeElapsed: Date.now() - jobState.startTime
+      timeElapsed: Date.now() - jobState.startTime,
+      // Clear message if target not met
+      shortfallMessage: targetMet 
+        ? undefined 
+        : `TARGET NOT MET: Generated ${finalWordCount} words (${percentage}% of target ${job.targetMinWords}). Shortfall: ${shortfall} words.`
     });
     
     activeJobs.delete(jobId);

@@ -1636,3 +1636,253 @@ function countChaptersInOutput(output: string): number {
   }
   return count;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORD COUNT ENFORCEMENT: COHERENT CONTINUATION GENERATION
+// When output falls short of target, generate additional content that:
+// 1. Reads all existing content from the database
+// 2. Continues the document coherently from where it left off
+// 3. Does NOT repeat content already written
+// 4. Maintains the same structure/outline established in earlier chunks
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ContinuationRequest {
+  existingContent: string;
+  skeleton: GlobalSkeleton;
+  currentWordCount: number;
+  targetWordCount: number;
+  wordsNeeded: number;
+  continuationIndex: number;
+  maxContinuations: number;
+  priorDeltasContext: string;
+}
+
+export interface ContinuationResult {
+  continuationText: string;
+  wordCount: number;
+  delta: ChunkDelta;
+  reachedNaturalEnd: boolean;
+  canContinueFurther: boolean;
+}
+
+/**
+ * Generate a coherent continuation of the document.
+ * This function reads the existing content and produces additional material
+ * that seamlessly continues from where the document left off.
+ */
+export async function generateCoherentContinuation(
+  request: ContinuationRequest
+): Promise<ContinuationResult> {
+  const startTime = Date.now();
+  const { 
+    existingContent, 
+    skeleton, 
+    currentWordCount, 
+    targetWordCount, 
+    wordsNeeded,
+    continuationIndex,
+    maxContinuations,
+    priorDeltasContext
+  } = request;
+  
+  console.log(`[CC-CONTINUE] Generating continuation ${continuationIndex + 1}/${maxContinuations}`);
+  console.log(`[CC-CONTINUE] Current: ${currentWordCount} words, Target: ${targetWordCount} words, Need: ${wordsNeeded} words`);
+  
+  // Extract the last portion of existing content for context (last ~2000 words)
+  const existingWords = existingContent.split(/\s+/);
+  const contextWords = Math.min(2000, existingWords.length);
+  const recentContent = existingWords.slice(-contextWords).join(' ');
+  
+  // Extract outline from skeleton for structural guidance
+  const outlineText = skeleton.outline.map((item, i) => `${i + 1}. ${item}`).join('\n');
+  const keyTermsText = skeleton.keyTerms.slice(0, 15).map(t => `- ${t.term}: ${t.meaning}`).join('\n');
+  
+  // Calculate how many words to request in this continuation
+  // Request slightly more than needed to ensure we hit the target
+  const wordsToRequest = Math.min(wordsNeeded + 500, 4000); // Cap at 4000 per continuation
+  
+  const prompt = `You are continuing an academic document that currently has ${currentWordCount} words but needs to reach at least ${targetWordCount} words.
+
+CRITICAL REQUIREMENTS:
+1. You must generate approximately ${wordsToRequest} words of NEW content
+2. Continue EXACTLY from where the document left off - do NOT repeat anything
+3. Maintain the same academic tone, writing style, and terminology
+4. Follow the document's established structure and argument flow
+5. Add substantive new material: examples, analysis, implications, applications
+6. Do NOT write "In conclusion" or any final summary - more content may follow
+
+DOCUMENT THESIS: ${skeleton.thesis}
+
+DOCUMENT OUTLINE (for structural reference):
+${outlineText}
+
+KEY TERMS (use consistently):
+${keyTermsText}
+
+${priorDeltasContext}
+
+RECENT CONTENT (the last ~${contextWords} words - continue from here):
+---
+${recentContent}
+---
+
+YOUR TASK:
+Write ${wordsToRequest} words that seamlessly continue this document. Pick up EXACTLY where the text above ends. Add new substantive content that:
+- Develops arguments further with fresh examples and evidence
+- Explores implications not yet discussed
+- Addresses potential objections or counterarguments  
+- Provides additional analysis, applications, or case studies
+- Maintains coherence with everything written before
+
+Do NOT:
+- Repeat any content from the existing text
+- Write introductory phrases like "Building on the above..." or "As mentioned..."
+- Include concluding statements or summaries
+- End abruptly mid-sentence
+
+BEGIN THE CONTINUATION NOW:`;
+
+  try {
+    const responseText = await callWithFallback(prompt, 8000, 0.4);
+    const continuationWordCount = countWords(responseText);
+    
+    console.log(`[CC-CONTINUE] Generated ${continuationWordCount} words in ${Date.now() - startTime}ms`);
+    
+    // Check if the continuation seems to have reached a natural ending
+    const reachedNaturalEnd = /\b(in\s+conclusion|to\s+summarize|finally|in\s+summary)\b/i.test(
+      responseText.slice(-500)
+    );
+    
+    // Extract delta for coherence tracking
+    const delta: ChunkDelta = {
+      newClaimsIntroduced: [],
+      termsUsed: skeleton.keyTerms.slice(0, 5).map(t => t.term),
+      conflictsDetected: [],
+      ledgerAdditions: []
+    };
+    
+    // Try to extract new claims from the continuation
+    const sentences = responseText.match(/[^.!?]+[.!?]+/g) || [];
+    const potentialClaims = sentences
+      .filter(s => s.length > 50 && s.length < 300)
+      .filter(s => !/\b(for example|such as|including|e\.g\.|i\.e\.)\b/i.test(s))
+      .slice(0, 5);
+    delta.newClaimsIntroduced = potentialClaims;
+    
+    return {
+      continuationText: responseText,
+      wordCount: continuationWordCount,
+      delta,
+      reachedNaturalEnd,
+      canContinueFurther: !reachedNaturalEnd && continuationWordCount > 100
+    };
+  } catch (error: any) {
+    console.error(`[CC-CONTINUE] Failed to generate continuation:`, error.message);
+    throw new Error(`Continuation generation failed: ${error.message}`);
+  }
+}
+
+/**
+ * Generate multiple continuations until target word count is met.
+ * Returns the combined continuation text and metadata about the process.
+ */
+export async function enforceWordCountWithContinuations(
+  existingContent: string,
+  skeleton: GlobalSkeleton,
+  targetWordCount: number,
+  priorDeltasContext: string,
+  maxContinuations: number = 10,
+  onProgress?: (msg: string, currentWords: number, targetWords: number) => void
+): Promise<{
+  finalContent: string;
+  finalWordCount: number;
+  continuationsGenerated: number;
+  targetMet: boolean;
+  shortfallReason?: string;
+}> {
+  let currentContent = existingContent;
+  let currentWordCount = countWords(existingContent);
+  let continuationsGenerated = 0;
+  
+  console.log(`[CC-ENFORCE] Starting word count enforcement. Current: ${currentWordCount}, Target: ${targetWordCount}`);
+  
+  while (currentWordCount < targetWordCount && continuationsGenerated < maxContinuations) {
+    const wordsNeeded = targetWordCount - currentWordCount;
+    
+    if (onProgress) {
+      onProgress(
+        `Generating additional content (${continuationsGenerated + 1}/${maxContinuations}): need ${wordsNeeded} more words...`,
+        currentWordCount,
+        targetWordCount
+      );
+    }
+    
+    try {
+      const result = await generateCoherentContinuation({
+        existingContent: currentContent,
+        skeleton,
+        currentWordCount,
+        targetWordCount,
+        wordsNeeded,
+        continuationIndex: continuationsGenerated,
+        maxContinuations,
+        priorDeltasContext
+      });
+      
+      // Append the continuation
+      currentContent = currentContent.trim() + '\n\n' + result.continuationText.trim();
+      currentWordCount = countWords(currentContent);
+      continuationsGenerated++;
+      
+      console.log(`[CC-ENFORCE] After continuation ${continuationsGenerated}: ${currentWordCount} words (target: ${targetWordCount})`);
+      
+      // If the LLM reached a natural conclusion and we're close to target, accept it
+      if (result.reachedNaturalEnd && currentWordCount >= targetWordCount * 0.95) {
+        console.log(`[CC-ENFORCE] LLM reached natural end at ${currentWordCount} words (${Math.round(currentWordCount/targetWordCount*100)}% of target)`);
+        break;
+      }
+      
+      // If the continuation was too short and can't continue, we might be stuck
+      if (!result.canContinueFurther && result.wordCount < 200) {
+        console.log(`[CC-ENFORCE] Warning: Continuation ${continuationsGenerated} only generated ${result.wordCount} words`);
+        if (continuationsGenerated >= 3) {
+          // If we've tried 3+ times with short outputs, stop
+          break;
+        }
+      }
+      
+      // Small delay between continuations to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+    } catch (error: any) {
+      console.error(`[CC-ENFORCE] Continuation ${continuationsGenerated + 1} failed:`, error.message);
+      break;
+    }
+  }
+  
+  const targetMet = currentWordCount >= targetWordCount;
+  let shortfallReason: string | undefined;
+  
+  if (!targetMet) {
+    const shortfall = targetWordCount - currentWordCount;
+    const percentage = Math.round((currentWordCount / targetWordCount) * 100);
+    
+    if (continuationsGenerated >= maxContinuations) {
+      shortfallReason = `Maximum continuation attempts (${maxContinuations}) reached. Generated ${currentWordCount} words (${percentage}% of target ${targetWordCount}). Shortfall: ${shortfall} words.`;
+    } else {
+      shortfallReason = `Content generation stopped after ${continuationsGenerated} continuations. Generated ${currentWordCount} words (${percentage}% of target ${targetWordCount}). Shortfall: ${shortfall} words. The document may have reached a natural conclusion point.`;
+    }
+    
+    console.log(`[CC-ENFORCE] TARGET NOT MET: ${shortfallReason}`);
+  } else {
+    console.log(`[CC-ENFORCE] TARGET MET: ${currentWordCount} words (${Math.round((currentWordCount / targetWordCount) * 100)}% of target)`);
+  }
+  
+  return {
+    finalContent: currentContent,
+    finalWordCount: currentWordCount,
+    continuationsGenerated,
+    targetMet,
+    shortfallReason
+  };
+}
