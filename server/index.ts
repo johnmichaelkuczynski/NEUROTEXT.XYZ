@@ -6,7 +6,6 @@ import { registerRoutes } from "./routes";
 import { validateEnvironmentOrExit } from "./utils/envValidation";
 import { setupWebSocketServer, cleanupOldJobs } from "./services/ccStreamingService";
 import { testDbConnection } from "./services/dbHelper";
-import { initAuditWebSocket } from "./services/auditService";
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -100,10 +99,6 @@ app.use((req, res, next) => {
   // Set up WebSocket server for CC streaming
   setupWebSocketServer(server);
   console.log('[CC-WS] WebSocket server initialized');
-  
-  // Set up WebSocket server for Audit streaming
-  initAuditWebSocket(server);
-  console.log('[AUDIT-WS] WebSocket server initialized');
 
   // Schedule cleanup of old completed jobs (every hour)
   setInterval(() => {
