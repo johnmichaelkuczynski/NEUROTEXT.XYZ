@@ -397,11 +397,18 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
         
         // Populate NEUROTEXT form with the loaded project data
         if (project.outputText) {
-          // For finished projects, show the output so user can modify
-          setValidatorInputText(project.outputText);
+          // For finished or interrupted projects with output, show in popup
+          setFullSuiteReconstructionOutput(project.outputText);
+          setFullSuiteStage('complete');
+          setFullSuiteActiveTab('reconstruction');
+          setFullSuitePopupOpen(true);  // CRITICAL: Open the popup to show content
+          
+          // Also set in validator output for reference
           setValidatorOutput(project.outputText);
-        } else if (project.originalText) {
-          // For unfinished projects, load the original text
+        }
+        
+        if (project.originalText) {
+          // Load the original text into the input
           setValidatorInputText(project.originalText);
         }
         
@@ -413,9 +420,9 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
         
         // Show toast
         toast({
-          title: project.isFinished ? "Project Loaded for Modification" : "Project Loaded for Resume",
+          title: project.isFinished ? "Project Loaded" : "Project Loaded for Resume",
           description: project.isFinished 
-            ? "You can now modify and re-run the reconstruction." 
+            ? "Your generated content is shown in the popup." 
             : "Continue working on this project.",
         });
         
