@@ -234,10 +234,11 @@ export function JobHistoryPage() {
         outputText = job.globalState?.stitchedDocument || '';
         // Also try to get customInstructions from globalState if available
         customInstructions = job.globalState?.customInstructions || customInstructions;
-        // Get original text from chunks if available
-        if (jobData.chunks && jobData.chunks.length > 0) {
+        
+        // If no stitched document but chunks exist, stitch them together
+        if (!outputText && jobData.chunks && jobData.chunks.length > 0) {
           const sortedChunks = [...jobData.chunks].sort((a: any, b: any) => a.chunkIndex - b.chunkIndex);
-          // Note: For viewing finished jobs, we use the output text
+          outputText = sortedChunks.map((chunk: any) => chunk.chunkText || chunk.outputText || '').join('\n\n');
         }
       }
       
