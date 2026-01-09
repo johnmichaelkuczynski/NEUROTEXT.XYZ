@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import Anthropic from '@anthropic-ai/sdk';
 
 // Provider priority order for failover (most preferred first)
-const PROVIDER_PRIORITY = ['anthropic', 'openai', 'deepseek', 'grok'] as const;
+const PROVIDER_PRIORITY = ['openai', 'anthropic', 'deepseek', 'grok'] as const;
 type Provider = typeof PROVIDER_PRIORITY[number] | 'perplexity';
 
 // Default models

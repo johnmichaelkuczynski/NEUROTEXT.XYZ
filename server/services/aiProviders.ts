@@ -150,7 +150,7 @@ export interface RewriteParams {
 }
 
 // Provider priority order for failover (most preferred first)
-const PROVIDER_PRIORITY = ['anthropic', 'openai', 'deepseek', 'grok'] as const;
+const PROVIDER_PRIORITY = ['openai', 'anthropic', 'deepseek', 'grok'] as const;
 
 // Check if a provider is configured (has API key)
 function isProviderConfigured(provider: string): boolean {
