@@ -113,13 +113,18 @@ export function parseExpansionInstructions(customInstructions: string): ParsedIn
   const originalText = customInstructions;
   
   // Parse target word count - multiple patterns
+  // NEUROTEXT REQUIREMENT: Detect all forms of word count specifications
   const wordCountPatterns = [
     /EXPAND\s*(?:TO)?\s*([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?/i,
-    /([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?\s*(?:THESIS|DISSERTATION|ESSAY|DOCUMENT|LENGTH)/i,
-    /(?:THESIS|DISSERTATION|ESSAY|DOCUMENT)\s*(?:OF)?\s*([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?/i,
+    /([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?\s*(?:THESIS|DISSERTATION|ESSAY|DOCUMENT|LENGTH|TREATISE|PAPER|SCHOLARLY)/i,
+    /(?:THESIS|DISSERTATION|ESSAY|DOCUMENT|TREATISE|PAPER)\s*(?:OF)?\s*([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?/i,
     /TARGET\s*(?:OF)?\s*([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?/i,
     /([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORDS?\s*TOTAL/i,
-    /TURN\s*(?:THIS\s*)?INTO\s*(?:A\s*)?([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORD/i
+    /TURN\s*(?:THIS\s*)?INTO\s*(?:A\s*)?([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORD/i,
+    /WRITE\s*(?:A\s*)?([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORD/i,  // Matches "WRITE A 90000 WORD"
+    /GENERATE\s*(?:A\s*)?([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORD/i,  // Matches "GENERATE A 50000 WORD"
+    /PRODUCE\s*(?:A\s*)?([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORD/i,  // Matches "PRODUCE A 30000 WORD"
+    /CREATE\s*(?:A\s*)?([\d,]+(?:\.\d+)?)\s*(?:K)?\s*WORD/i,  // Matches "CREATE A 20000 WORD"
   ];
   
   for (const pattern of wordCountPatterns) {

@@ -1409,11 +1409,15 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   };
 
   // Batch process multiple modes at once
+  // NEUROTEXT REQUIREMENT: Allow instructions-only mode
   const handleValidatorBatchProcess = async () => {
-    if (!validatorInputText.trim()) {
+    const hasInputText = validatorInputText.trim().length > 0;
+    const hasInstructions = validatorCustomInstructions.trim().length > 0;
+    
+    if (!hasInputText && !hasInstructions) {
       toast({
-        title: "No Input Text",
-        description: "Please enter text to validate",
+        title: "Input Required",
+        description: "Please enter text OR instructions to process.",
         variant: "destructive"
       });
       return;
@@ -1428,6 +1432,20 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       return;
     }
 
+    // INTELLIGENT INPUT INTERPRETATION
+    const interpretation = interpretInput(validatorInputText, validatorCustomInstructions);
+    
+    if (interpretation.wasSwapped) {
+      toast({
+        title: "Inputs Interpreted",
+        description: "Detected instructions in text box and content in instructions box - they've been swapped automatically.",
+      });
+    }
+    
+    const effectiveText = interpretation.effectiveText;
+    const effectiveInstructions = interpretation.effectiveInstructions;
+    const effectiveInputText = effectiveText.trim().length > 0 ? effectiveText : effectiveInstructions;
+
     setValidatorBatchLoading(true);
     setValidatorBatchResults([]);
     setValidatorOutput("");
@@ -1438,18 +1456,19 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: validatorInputText,
+          text: effectiveInputText,
           modes: validatorSelectedModes,
           targetDomain: "", // Same as original domain
           fidelityLevel: "aggressive", // Always aggressive in batch mode
           mathFramework: "axiomatic-set-theory", // Maximal formalization
           constraintType: "true-statements", // Maximal truth objective
           rigorLevel: "maximal", // Maximal rigor
-          customInstructions: validatorCustomInstructions,
+          customInstructions: effectiveInstructions,
           truthMapping: "maximal-truth", // Maximal truth mapping
           mathTruthMapping: "maximal-truth", // Maximal math truth mapping
           literalTruth: true, // Enable literal truth mode
           llmProvider: validatorLLMProvider,
+          instructionsOnly: effectiveText.trim().length === 0,
         }),
       });
 

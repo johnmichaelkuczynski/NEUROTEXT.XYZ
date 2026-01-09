@@ -61,7 +61,7 @@ export const SendToButton: React.FC<SendToButtonProps> = ({
       available: !!onSendToChat 
     },
     { 
-      label: "Text Model Validator", 
+      label: "NEUROTEXT", 
       icon: FileEdit, 
       callback: onSendToValidator,
       available: !!onSendToValidator 

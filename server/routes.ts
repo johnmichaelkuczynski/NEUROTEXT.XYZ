@@ -2862,16 +2862,31 @@ Structural understanding is always understanding of relationships. Observational
   });
 
   // Text Model Validator endpoint
+  // NEUROTEXT REQUIREMENT: Allow instructions-only mode
   app.post("/api/text-model-validator", async (req: Request, res: Response) => {
     try {
-      const { text, mode, targetDomain, fidelityLevel, mathFramework, constraintType, rigorLevel, customInstructions, truthMapping, mathTruthMapping, literalTruth, llmProvider } = req.body;
+      const { text, mode, targetDomain, fidelityLevel, mathFramework, constraintType, rigorLevel, customInstructions, truthMapping, mathTruthMapping, literalTruth, llmProvider, instructionsOnly } = req.body;
 
-      if (!text || !mode) {
+      // NEUROTEXT: Allow instructions-only mode - text OR customInstructions is sufficient
+      const hasText = text && text.trim().length > 0;
+      const hasInstructions = customInstructions && customInstructions.trim().length > 0;
+      
+      if (!mode) {
         return res.status(400).json({ 
           success: false,
-          message: "Text and mode are required" 
+          message: "Mode is required" 
         });
       }
+      
+      if (!hasText && !hasInstructions) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Text or instructions are required" 
+        });
+      }
+      
+      // Use effective text - if no text but has instructions, use instructions as text for processing
+      const effectiveText = hasText ? text : customInstructions;
 
       console.log(`Text Model Validator - Mode: ${mode}, Target Domain: ${targetDomain || 'not specified'}`);
 
@@ -2880,8 +2895,8 @@ Structural understanding is always understanding of relationships. Observational
       let userPrompt = "";
 
       if (mode === "reconstruction") {
-        // Count input words for reference
-        const inputWordCount = text.trim().split(/\s+/).length;
+        // Count input words for reference - use effectiveText for instructions-only mode
+        const inputWordCount = effectiveText.trim().split(/\s+/).length;
         
         // PROTOCOL: User instructions are ALWAYS obeyed. No thresholds. No "simple mode".
         // Check if user has expansion instructions FIRST - this takes priority over position-list detection
@@ -2918,7 +2933,7 @@ Structural understanding is always understanding of relationships. Observational
             } : undefined;
             
             const result = await universalExpand({
-              text,
+              text: effectiveText,
               customInstructions: customInstructions || '',
               aggressiveness,
               onChunk
@@ -2951,10 +2966,10 @@ Structural understanding is always understanding of relationships. Observational
         // Check if this is a position list (pipe-delimited format) - checked AFTER expansion instructions
         // so that expansion instructions take priority for streaming support
         const { isPositionList, processPositionList } = await import('./services/positionListReconstruction');
-        if (isPositionList(text)) {
+        if (isPositionList(effectiveText)) {
           console.log(`[Position-List] Detected structured position list input`);
           try {
-            const result = await processPositionList(text, customInstructions || '');
+            const result = await processPositionList(effectiveText, customInstructions || '');
             
             if (!result.success) {
               return res.status(500).json({
@@ -2998,7 +3013,7 @@ Structural understanding is always understanding of relationships. Observational
             const aggressiveness = (fidelityLevel === 'conservative') ? 'conservative' : 'aggressive';
             
             const result = await outlineFirstReconstruct(
-              text,
+              effectiveText,
               customInstructions,
               aggressiveness
             );
@@ -3035,9 +3050,9 @@ Structural understanding is always understanding of relationships. Observational
           try {
             const { crossChunkReconstruct } = await import('./services/crossChunkCoherence');
             
-            // crossChunkReconstruct(text, audienceParameters, rigorLevel, customInstructions, contentAnalysis)
+            // crossChunkReconstruct(effectiveText, audienceParameters, rigorLevel, customInstructions, contentAnalysis)
             const result = await crossChunkReconstruct(
-              text,
+              effectiveText,
               undefined, // audienceParameters
               fidelityLevel || 'aggressive', // rigorLevel  
               customInstructions,
@@ -3106,7 +3121,7 @@ CRITICAL: NO markdown formatting (no # headers, no ** bold **, no * italics *). 
 
           userPrompt = `RECONSTRUCT THIS TEXT
 
-${text}
+${effectiveText}
 
 ${targetDomain ? `Domain context: ${targetDomain}` : ''}
 ${customInstructions ? `\nUser instructions: ${customInstructions}` : ''}
@@ -3183,7 +3198,7 @@ CRITICAL: NO markdown formatting (no # headers, no ** bold **, no * italics *). 
         
           userPrompt = `AGGRESSIVELY RECONSTRUCT THIS TEXT
 
-${text}
+${effectiveText}
 
 ${targetDomain ? `Domain: ${targetDomain}` : ''}
 ${customInstructions ? `\nUser instructions: ${customInstructions}` : ''}
@@ -3227,7 +3242,7 @@ CRITICAL OUTPUT RULES:
         userPrompt = `ISOMORPHISM MODE
 
 Text to map:
-${text}
+${effectiveText}
 
 ${targetDomain ? `Target domain: ${targetDomain}` : ''}
 ${constraintType ? `Constraint type: ${constraintType}` : ''}
@@ -3269,7 +3284,7 @@ OUTPUT FORMAT: Use plain text with numbered sections. NO markdown formatting (no
 ================================
 TEXT TO FORMALIZE
 ================================
-${text}
+${effectiveText}
 
 ${mathFramework ? `Mathematical framework preference: ${mathFramework}` : ''}
 ${rigorLevel ? `Rigor level: ${rigorLevel}` : ''}
@@ -3367,7 +3382,7 @@ CRITICAL OUTPUT RULES:
         userPrompt = `AUTO-DECIDE MODE
 
 Text to analyze:
-${text}
+${effectiveText}
 
 ${customInstructions ? `Custom Instructions: ${customInstructions}\n` : ''}
 Task: Analyze this text and determine the optimal validation approach. Consider:
@@ -3432,7 +3447,7 @@ CRITICAL OUTPUT RULES:
         userPrompt = `TRUTH-VALUE ISOMORPHISM MODE
 
 Text to map:
-${text}
+${effectiveText}
 
 ${targetDomain ? `Target domain: ${targetDomain}` : ''}
 Truth-Value Mapping: ${truthMapping ? truthMappingDescriptions[truthMapping as keyof typeof truthMappingDescriptions] : 'Not specified'}
@@ -3479,7 +3494,7 @@ CRITICAL OUTPUT RULES:
 ================================
 TEXT TO FORMALIZE
 ================================
-${text}
+${effectiveText}
 
 ${mathFramework ? `Mathematical framework preference: ${mathFramework}` : ''}
 ${rigorLevel ? `Rigor level: ${rigorLevel}` : ''}
@@ -3624,7 +3639,7 @@ CRITICAL FORMATTING RULE: Do NOT use any markdown formatting. No ### headers, no
         userPrompt = `AXIOMATIC SYSTEM TRANSFORMATION
 
 INPUT TEXT:
-${text}
+${effectiveText}
 
 ${targetDomain ? `Domain context: ${targetDomain}` : ''}
 ${customInstructions ? `Custom Instructions: ${customInstructions}` : ''}
