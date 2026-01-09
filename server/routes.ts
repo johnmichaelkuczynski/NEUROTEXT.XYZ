@@ -2887,6 +2887,26 @@ Structural understanding is always understanding of relationships. Observational
       
       // Use effective text - if no text but has instructions, use instructions as text for processing
       const effectiveText = hasText ? text : customInstructions;
+      
+      // NEUROTEXT CORE RULE: AUTO-EXPAND when no instructions provided
+      // Count input words to determine expansion behavior
+      const inputWordCount = effectiveText.trim().split(/\s+/).length;
+      
+      // AUTO-GENERATE INSTRUCTIONS when user provides text but no instructions
+      let effectiveInstructions = customInstructions || '';
+      if (hasText && !hasInstructions) {
+        // User provided text but no instructions → AUTO-EXPAND
+        if (inputWordCount < 1000) {
+          // Small input → expand to 5000 words
+          effectiveInstructions = "EXPAND TO 5000 WORDS. Write the maximally good, maximally coherent scholarly version of this text. Add real information, real arguments, real evidence. NO PUFFERY. NO HEDGING. NO FILLER. Every word must carry meaning.";
+          console.log(`[AUTO-EXPAND] Small input (${inputWordCount} words) → auto-expanding to 5000 words`);
+        } else {
+          // Large input → improve and expand by 1.5x
+          const targetWords = Math.ceil(inputWordCount * 1.5);
+          effectiveInstructions = `EXPAND TO ${targetWords} WORDS. Improve this text maximally. Increase length by 1.5x with ACTUAL INFORMATION, real arguments, real evidence, real examples. NO PUFFERY. NO HEDGING. NO FILLER. Every added word must carry substantive meaning.`;
+          console.log(`[AUTO-EXPAND] Large input (${inputWordCount} words) → auto-expanding to ${targetWords} words (1.5x)`);
+        }
+      }
 
       console.log(`Text Model Validator - Mode: ${mode}, Target Domain: ${targetDomain || 'not specified'}`);
 
@@ -2895,9 +2915,6 @@ Structural understanding is always understanding of relationships. Observational
       let userPrompt = "";
 
       if (mode === "reconstruction") {
-        // Count input words for reference - use effectiveText for instructions-only mode
-        const inputWordCount = effectiveText.trim().split(/\s+/).length;
-        
         // PROTOCOL: User instructions are ALWAYS obeyed. No thresholds. No "simple mode".
         // Check if user has expansion instructions FIRST - this takes priority over position-list detection
         // because expansion instructions enable streaming which is critical for large outputs
@@ -2907,8 +2924,8 @@ Structural understanding is always understanding of relationships. Observational
         // Check for streaming mode
         const streamMode = req.query.stream === 'true';
         
-        if (customInstructions && hasExpansionInstructions(customInstructions)) {
-          const parsedInstructions = parseExpansionInstructions(customInstructions);
+        if (effectiveInstructions && hasExpansionInstructions(effectiveInstructions)) {
+          const parsedInstructions = parseExpansionInstructions(effectiveInstructions);
           console.log(`[Universal Expansion] User requested expansion to ${parsedInstructions.targetWordCount} words`);
           console.log(`[Universal Expansion] Input: ${inputWordCount} words, following user instructions exactly`);
           console.log(`[Universal Expansion] Stream mode: ${streamMode ? 'ENABLED' : 'disabled'}`);
@@ -2934,7 +2951,7 @@ Structural understanding is always understanding of relationships. Observational
             
             const result = await universalExpand({
               text: effectiveText,
-              customInstructions: customInstructions || '',
+              customInstructions: effectiveInstructions,
               aggressiveness,
               onChunk
             });
@@ -2969,7 +2986,7 @@ Structural understanding is always understanding of relationships. Observational
         if (isPositionList(effectiveText)) {
           console.log(`[Position-List] Detected structured position list input`);
           try {
-            const result = await processPositionList(effectiveText, customInstructions || '');
+            const result = await processPositionList(effectiveText, effectiveInstructions);
             
             if (!result.success) {
               return res.status(500).json({
@@ -3014,7 +3031,7 @@ Structural understanding is always understanding of relationships. Observational
             
             const result = await outlineFirstReconstruct(
               effectiveText,
-              customInstructions,
+              effectiveInstructions,
               aggressiveness
             );
             
@@ -3055,7 +3072,7 @@ Structural understanding is always understanding of relationships. Observational
               effectiveText,
               undefined, // audienceParameters
               fidelityLevel || 'aggressive', // rigorLevel  
-              customInstructions,
+              effectiveInstructions,
               undefined // contentAnalysis
             );
             
@@ -3080,9 +3097,9 @@ Structural understanding is always understanding of relationships. Observational
           }
         }
         
-        // NEUROTEXT CRITICAL: If user provides custom instructions, FOLLOW THEM EXACTLY
-        // Custom instructions OVERRIDE default reconstruction behavior completely
-        if (customInstructions && customInstructions.trim().length > 0) {
+        // NEUROTEXT CRITICAL: If user provides instructions (explicit or auto-generated), FOLLOW THEM EXACTLY
+        // Instructions OVERRIDE default reconstruction behavior completely
+        if (effectiveInstructions && effectiveInstructions.trim().length > 0) {
           systemPrompt = `You are an intelligent text transformer. You MUST follow the user's instructions EXACTLY.
 
 YOUR ONLY JOB: Do EXACTLY what the user instructs. Their instructions are your PRIMARY directive.
@@ -3092,16 +3109,25 @@ If they say "expand to 5000 words" - produce 5000 words.
 If they say "write as a poem" - produce a poem.
 If they say "make into a legal document" - produce a legal document.
 
+CORE RULES:
+- NEVER use puffery or filler text
+- NEVER hedge or qualify unnecessarily  
+- Every word must carry substantive meaning
+- Add REAL information, arguments, and evidence
+- Follow the user's format exactly
+
 DO NOT:
 - Add outlines or academic structure unless instructed
 - Produce academic format unless instructed
 - Add diagnosis or key terms unless instructed
 - Override the user's format with your own preferences
+- Use hedging language like "may", "might", "perhaps", "arguably"
+- Add filler or decorative language
 
 CRITICAL: The user's instruction is LAW. Follow it exactly.
 CRITICAL: NO markdown formatting (no # headers, no ** bold **, no * italics *). Use plain text only.`;
 
-          userPrompt = `USER INSTRUCTION: ${customInstructions}
+          userPrompt = `USER INSTRUCTION: ${effectiveInstructions}
 
 INPUT TEXT TO TRANSFORM:
 ${effectiveText}

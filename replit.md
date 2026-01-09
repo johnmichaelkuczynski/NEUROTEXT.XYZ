@@ -80,6 +80,13 @@ The application employs a monorepo structure, separating client and server compo
         - **Expansion Keyword Detection**: Recognizes keywords like "expand", "write", "generate", "produce", etc.
         - **Full Suite Integration**: All three stages (Reconstruction, Objections, Objection-Proof) use interpreted inputs
         - **Toast Notification**: Users are notified when inputs are automatically interpreted/swapped
+    - **NEUROTEXT Core Behavior Rules** (Jan 2026): The app ALWAYS follows user instructions exactly:
+        - **Custom Instructions Override**: When user provides instructions (e.g., "TURN INTO ONE MAN PLAY"), the app produces exactly that format, not an academic outline
+        - **Auto-Expand Without Instructions**: Small input (<1000 words) + no instructions → auto-expand to 5000 word scholarly version. Large input → expand by 1.5x with real content
+        - **Instructions-Only Mode**: User can enter only instructions (e.g., "WRITE A 200K DISSERTATION ON BOTANY") with no source text → app complies
+        - **NO PUFFERY Rule**: Every word must carry substantive meaning. No filler or decorative language
+        - **NO HEDGING Rule**: Never use hedging language like "may", "might", "perhaps", "arguably"
+        - **ZHI 1 Default**: Default LLM provider is now ZHI 1 (OpenAI)
 
 ## External Dependencies
 - **AI Service Providers**: OpenAI API (GPT-4), Anthropic API (Claude), DeepSeek API, Perplexity AI, Grok API (xAI).
