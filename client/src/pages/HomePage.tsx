@@ -197,6 +197,7 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   const [validatorMathTruthMapping, setValidatorMathTruthMapping] = useState<"make-true" | "keep-true" | "make-false">("make-true");
   const [validatorLiteralTruth, setValidatorLiteralTruth] = useState(false);
   const [validatorLLMProvider, setValidatorLLMProvider] = useState<string>("zhi1"); // Default to ZHI 1
+  const [validatorTargetWordCount, setValidatorTargetWordCount] = useState<string>(""); // Dedicated word count input
   
   // Streaming Output Modal State (for real-time expansion preview)
   const [streamingModalOpen, setStreamingModalOpen] = useState(false);
@@ -1130,17 +1131,32 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     const effectiveText = interpretation.effectiveText;
     let effectiveInstructions = interpretation.effectiveInstructions;
     
-    // AUTO-EXPAND: If user provides small text with NO instructions, auto-expand to 5000 words
-    const inputWordCount = effectiveText.trim().split(/\s+/).filter(w => w).length;
-    const hasNoInstructions = effectiveInstructions.trim().length === 0;
-    const isSmallInput = inputWordCount > 0 && inputWordCount < 1000;
-    
-    if (isSmallInput && hasNoInstructions) {
-      effectiveInstructions = "EXPAND TO 5000 WORDS. Write a maximum coherence scholarly paper expanding on this input.";
+    // DEDICATED WORD COUNT FIELD: If user specified a target word count, prepend it to instructions
+    const targetWC = parseInt(validatorTargetWordCount);
+    if (targetWC && targetWC > 0) {
+      const wordCountInstruction = `EXPAND TO ${targetWC} WORDS.`;
+      if (effectiveInstructions.trim()) {
+        effectiveInstructions = `${wordCountInstruction} ${effectiveInstructions}`;
+      } else {
+        effectiveInstructions = `${wordCountInstruction} Write a maximally coherent scholarly version. NO PUFFERY. NO HEDGING. Every word must carry meaning.`;
+      }
       toast({
-        title: "Auto-Expansion Enabled",
-        description: "Small input detected with no instructions - auto-expanding to 5000 word coherent paper.",
+        title: "Target Word Count Set",
+        description: `Output will be expanded to ${targetWC.toLocaleString()} words.`,
       });
+    } else {
+      // AUTO-EXPAND: If no word count specified and user provides small text with NO instructions, auto-expand to 5000 words
+      const inputWordCount = effectiveText.trim().split(/\s+/).filter(w => w).length;
+      const hasNoInstructions = effectiveInstructions.trim().length === 0;
+      const isSmallInput = inputWordCount > 0 && inputWordCount < 1000;
+      
+      if (isSmallInput && hasNoInstructions) {
+        effectiveInstructions = "EXPAND TO 5000 WORDS. Write a maximum coherence scholarly paper expanding on this input.";
+        toast({
+          title: "Auto-Expansion Enabled",
+          description: "Small input detected with no instructions - auto-expanding to 5000 word coherent paper.",
+        });
+      }
     }
     
     // If only instructions provided (no effective text), use instructions as the "input" for processing
@@ -1641,17 +1657,32 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     const effectiveText = interpretation.effectiveText;
     let effectiveInstructions = interpretation.effectiveInstructions;
     
-    // AUTO-EXPAND: If user provides small text with NO instructions, auto-expand to 5000 words
-    const inputWordCount = effectiveText.trim().split(/\s+/).filter(w => w).length;
-    const hasNoInstructions = effectiveInstructions.trim().length === 0;
-    const isSmallInput = inputWordCount > 0 && inputWordCount < 1000;
-    
-    if (isSmallInput && hasNoInstructions) {
-      effectiveInstructions = "EXPAND TO 5000 WORDS. Write a maximum coherence scholarly paper expanding on this input.";
+    // DEDICATED WORD COUNT FIELD: If user specified a target word count, prepend it to instructions
+    const targetWC = parseInt(validatorTargetWordCount);
+    if (targetWC && targetWC > 0) {
+      const wordCountInstruction = `EXPAND TO ${targetWC} WORDS.`;
+      if (effectiveInstructions.trim()) {
+        effectiveInstructions = `${wordCountInstruction} ${effectiveInstructions}`;
+      } else {
+        effectiveInstructions = `${wordCountInstruction} Write a maximally coherent scholarly version. NO PUFFERY. NO HEDGING. Every word must carry meaning.`;
+      }
       toast({
-        title: "Auto-Expansion Enabled",
-        description: "Small input detected with no instructions - auto-expanding to 5000 word coherent paper.",
+        title: "Target Word Count Set",
+        description: `Output will be expanded to ${targetWC.toLocaleString()} words.`,
       });
+    } else {
+      // AUTO-EXPAND: If no word count specified and user provides small text with NO instructions, auto-expand to 5000 words
+      const inputWordCount = effectiveText.trim().split(/\s+/).filter(w => w).length;
+      const hasNoInstructions = effectiveInstructions.trim().length === 0;
+      const isSmallInput = inputWordCount > 0 && inputWordCount < 1000;
+      
+      if (isSmallInput && hasNoInstructions) {
+        effectiveInstructions = "EXPAND TO 5000 WORDS. Write a maximum coherence scholarly paper expanding on this input.";
+        toast({
+          title: "Auto-Expansion Enabled",
+          description: "Small input detected with no instructions - auto-expanding to 5000 word coherent paper.",
+        });
+      }
     }
     
     const isInstructionsOnly = effectiveText.trim().length === 0;
@@ -4962,20 +4993,43 @@ Generated on: ${new Date().toLocaleString()}`;
             </Button>
           </div>
 
+          {/* Target Word Count Input - DEDICATED FIELD */}
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-2 border-violet-300 dark:border-violet-700 mt-6">
+            <label className="block text-sm font-semibold text-violet-700 dark:text-violet-300 mb-2">
+              Target Word Count (Required for expansion)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                value={validatorTargetWordCount}
+                onChange={(e) => setValidatorTargetWordCount(e.target.value)}
+                placeholder="e.g., 5000, 25000, 100000"
+                className="flex-1 px-4 py-3 text-lg font-semibold border-2 border-violet-300 dark:border-violet-600 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:bg-gray-700 dark:text-white"
+                min="100"
+                max="300000"
+                data-testid="input-target-word-count"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">words</span>
+            </div>
+            <p className="text-xs text-violet-600 dark:text-violet-400 mt-2 font-medium">
+              Enter desired output length. Leave empty to auto-expand (small input → 5000 words, large input → 1.5x).
+            </p>
+          </div>
+
           {/* Optional Custom Instructions Box */}
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 mt-6">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 mt-4">
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
               Custom Instructions (Optional)
             </label>
             <Textarea
               value={validatorCustomInstructions}
               onChange={(e) => setValidatorCustomInstructions(e.target.value)}
-              placeholder="e.g., 'Focus on the logical structure' or 'Reconstruct as a control theory model' or 'Emphasize clarity over fidelity'"
+              placeholder="e.g., 'TURN INTO A PLAY' or 'WRITE AS A LEGAL DOCUMENT' or 'Focus on the logical structure'"
               className="min-h-[100px] text-sm"
               data-testid="textarea-validator-custom-instructions"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Provide specific guidance about the nature of the reconstruction.
+              Provide specific guidance about format or content. The app will follow your instructions exactly.
             </p>
           </div>
 
