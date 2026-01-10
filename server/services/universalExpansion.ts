@@ -379,6 +379,7 @@ export function hasExpansionInstructions(customInstructions?: string): boolean {
 
 /**
  * Generate a single section of the expanded document
+ * WITH WORD COUNT ENFORCEMENT - continues generating until target is reached
  */
 async function generateSection(
   sectionName: string,
@@ -403,7 +404,26 @@ async function generateSection(
     ? `Engage with these philosophers where relevant: ${parsedInstructions.philosophersToReference.join(', ')}`
     : '';
 
-  const prompt = `You are writing a section of an academic thesis/dissertation.
+  // WORD COUNT ENFORCEMENT: Generate in chunks until target is reached
+  let accumulatedContent = '';
+  let currentWordCount = 0;
+  let continuationAttempts = 0;
+  const maxContinuationAttempts = 20; // Safety limit
+  const minWordsPerChunk = 2000; // Minimum expected per generation
+  
+  console.log(`[Section ${sectionName}] Target: ${targetWordCount} words`);
+
+  while (currentWordCount < targetWordCount * 0.95 && continuationAttempts < maxContinuationAttempts) {
+    const wordsRemaining = targetWordCount - currentWordCount;
+    const isFirstChunk = continuationAttempts === 0;
+    
+    // Request more words than needed since LLM underdelivers
+    const wordsToRequest = Math.min(wordsRemaining, 4000); // Cap at 4000 per request for reliability
+    
+    let prompt: string;
+    
+    if (isFirstChunk) {
+      prompt = `You are writing a section of an academic thesis/dissertation.
 
 ORIGINAL SOURCE TEXT (the seed idea to expand):
 ${originalText}
@@ -416,7 +436,8 @@ ${previousSections || '[This is the first section]'}
 
 ═══════════════════════════════════════════════════════════════
 SECTION TO WRITE NOW: ${sectionName}
-TARGET LENGTH: ${targetWordCount} words (STRICT - must hit this target)
+TOTAL TARGET LENGTH: ${targetWordCount} words
+THIS CHUNK: Write approximately ${wordsToRequest} words to START this section
 ═══════════════════════════════════════════════════════════════
 
 STYLE REQUIREMENTS:
@@ -428,40 +449,94 @@ USER'S ORIGINAL INSTRUCTIONS:
 ${customInstructions}
 
 CRITICAL REQUIREMENTS:
-1. Write EXACTLY ${targetWordCount} words for this section (±5%)
+1. Write approximately ${wordsToRequest} words NOW - this is just the beginning
 2. This must be substantive academic prose, not filler
 3. Develop the argument with evidence, examples, and analysis
-4. Connect to previous sections and set up future ones
-5. NO MARKDOWN FORMATTING - use plain text only
-6. Include proper academic citations inline (Author, Year)
-7. Each paragraph should advance the argument
-8. DO NOT start with the section title - the system will add it
+4. NO MARKDOWN FORMATTING - use plain text only
+5. Include proper academic citations inline (Author, Year)
+6. Each paragraph should advance the argument
+7. DO NOT start with the section title - the system will add it
+8. DO NOT write a conclusion yet - more content will follow
+9. End at a natural paragraph break, ready for continuation
 
-Write the section content now (do NOT include the section title "${sectionName}" at the start):`;
+Write the BEGINNING of this section (${wordsToRequest} words):`;
+    } else {
+      // Continuation prompt
+      const lastParagraphs = accumulatedContent.split('\n\n').slice(-3).join('\n\n');
+      prompt = `You are CONTINUING to write a section of an academic thesis/dissertation.
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: Math.ceil(targetWordCount * 2), // Allow plenty of room
-    messages: [{ role: "user", content: prompt }]
-  }, {
-    timeout: 600000 // 10 minute timeout for non-streaming calls
-  });
+SECTION: ${sectionName}
+WORDS WRITTEN SO FAR: ${currentWordCount}
+WORDS STILL NEEDED: ${wordsRemaining}
+TARGET TOTAL: ${targetWordCount} words
 
-  const content = response.content[0].type === 'text' ? response.content[0].text : '';
+LAST PART OF WHAT YOU WROTE (continue from here):
+"""
+${lastParagraphs}
+"""
 
-  // Log individual section generation
-  await logLLMCall({
-    jobType: 'universal_expansion',
-    modelName: 'claude-sonnet-4-20250514',
-    provider: 'anthropic',
-    promptSummary: `Generate section: ${sectionName}`,
-    promptFull: prompt,
-    responseSummary: summarizeText(content),
-    responseFull: content,
-    status: 'success'
-  });
+USER'S ORIGINAL INSTRUCTIONS:
+${customInstructions}
 
-  return content;
+CRITICAL REQUIREMENTS:
+1. Write approximately ${wordsToRequest} MORE words to CONTINUE this section
+2. Continue EXACTLY where the text left off - maintain flow and coherence
+3. Do NOT repeat what was already written
+4. Do NOT write introductory phrases like "Continuing from..." or "As discussed..."
+5. Just continue the academic prose naturally
+6. This must be substantive content, not filler
+7. NO MARKDOWN FORMATTING - use plain text only
+${wordsRemaining > 4000 ? '8. DO NOT conclude yet - more content will follow' : '8. You may write a concluding paragraph if appropriate'}
+
+Continue writing NOW (${wordsToRequest} more words):`;
+    }
+
+    console.log(`[Section ${sectionName}] Attempt ${continuationAttempts + 1}: Requesting ${wordsToRequest} words (have ${currentWordCount}/${targetWordCount})`);
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000, // Allow plenty of room
+      messages: [{ role: "user", content: prompt }]
+    }, {
+      timeout: 600000 // 10 minute timeout
+    });
+
+    const chunkContent = response.content[0].type === 'text' ? response.content[0].text : '';
+    const chunkWordCount = chunkContent.trim().split(/\s+/).filter(w => w).length;
+    
+    console.log(`[Section ${sectionName}] Got ${chunkWordCount} words in chunk ${continuationAttempts + 1}`);
+
+    // Log the generation
+    await logLLMCall({
+      jobType: 'universal_expansion',
+      modelName: 'claude-sonnet-4-20250514',
+      provider: 'anthropic',
+      promptSummary: `Generate section ${sectionName} chunk ${continuationAttempts + 1}`,
+      promptFull: prompt,
+      responseSummary: summarizeText(chunkContent),
+      responseFull: chunkContent,
+      status: 'success'
+    });
+
+    // Append to accumulated content
+    if (isFirstChunk) {
+      accumulatedContent = chunkContent.trim();
+    } else {
+      accumulatedContent += '\n\n' + chunkContent.trim();
+    }
+    
+    currentWordCount = accumulatedContent.trim().split(/\s+/).filter(w => w).length;
+    continuationAttempts++;
+    
+    // Small delay to avoid rate limiting
+    if (currentWordCount < targetWordCount * 0.95) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  console.log(`[Section ${sectionName}] COMPLETE: ${currentWordCount} words in ${continuationAttempts} chunks (target: ${targetWordCount})`);
+
+  return accumulatedContent;
 }
 
 /**
