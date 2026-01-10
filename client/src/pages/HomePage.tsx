@@ -4593,6 +4593,17 @@ Generated on: ${new Date().toLocaleString()}`;
                     </>
                   )}
                 </Button>
+
+                {/* OPEN PROGRESS POPUP - Always visible button to re-open streaming modal */}
+                <Button
+                  onClick={() => setStreamingModalOpen(true)}
+                  variant="outline"
+                  className="w-full border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 py-4 text-base font-medium"
+                  data-testid="button-open-progress-popup"
+                >
+                  <Eye className="w-5 h-5 mr-2" />
+                  Open Progress Popup
+                </Button>
                 
                 {/* View Results Button - Reopens popup when there's content */}
                 {(fullSuiteReconstructionOutput || objectionsOutput || fullSuiteObjectionProofOutput) && !fullSuitePopupOpen && (
