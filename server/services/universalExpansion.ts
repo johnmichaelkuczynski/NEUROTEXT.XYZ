@@ -582,13 +582,29 @@ export async function universalExpand(request: ExpansionRequest): Promise<Expans
   let structure = parsed.structure;
   if (structure.length === 0) {
     // For very large documents (50k+), create more granular structure
+    // CRITICAL: Allocation must SUM to exactly targetWordCount
     if (targetWordCount >= 50000) {
-      // 20 sections for 100k+ documents, each ~5000 words (manageable per section)
-      const sectionCount = Math.max(15, Math.ceil(targetWordCount / 6000));
-      const wordsPerSection = Math.round(targetWordCount / sectionCount);
+      // Fixed allocations as percentage of target
+      const abstractWords = Math.round(targetWordCount * 0.01);  // 1%
+      const introWords = Math.round(targetWordCount * 0.05);     // 5%
+      const conclusionWords = Math.round(targetWordCount * 0.04); // 4%
+      const fixedTotal = abstractWords + introWords + conclusionWords; // 10%
+      
+      // Remaining 90% distributed across 12 body sections
+      const remainingWords = targetWordCount - fixedTotal;
+      const bodySectionCount = 12;
+      const wordsPerSection = Math.round(remainingWords / bodySectionCount);
+      
+      // Calculate actual totals and adjust last body section to hit exact target
+      const bodyTotal = wordsPerSection * (bodySectionCount - 1);
+      const lastBodySectionWords = remainingWords - bodyTotal;
+      
+      console.log(`[Universal Expansion] Allocation: Abstract=${abstractWords}, Intro=${introWords}, Body sections (11x${wordsPerSection} + 1x${lastBodySectionWords}), Conclusion=${conclusionWords}`);
+      console.log(`[Universal Expansion] Allocation total: ${abstractWords + introWords + bodyTotal + lastBodySectionWords + conclusionWords} (target: ${targetWordCount})`);
+      
       structure = [
-        { name: "ABSTRACT", wordCount: Math.round(targetWordCount * 0.01) },
-        { name: "INTRODUCTION", wordCount: Math.round(targetWordCount * 0.05) },
+        { name: "ABSTRACT", wordCount: abstractWords },
+        { name: "INTRODUCTION", wordCount: introWords },
         { name: "LITERATURE REVIEW PART 1: HISTORICAL CONTEXT", wordCount: wordsPerSection },
         { name: "LITERATURE REVIEW PART 2: CONTEMPORARY PERSPECTIVES", wordCount: wordsPerSection },
         { name: "LITERATURE REVIEW PART 3: CRITICAL ANALYSIS", wordCount: wordsPerSection },
@@ -600,8 +616,8 @@ export async function universalExpand(request: ExpansionRequest): Promise<Expans
         { name: "CHAPTER 6: CASE STUDIES", wordCount: wordsPerSection },
         { name: "CHAPTER 7: METHODOLOGICAL CONSIDERATIONS", wordCount: wordsPerSection },
         { name: "CHAPTER 8: BROADER IMPLICATIONS", wordCount: wordsPerSection },
-        { name: "CHAPTER 9: FUTURE DIRECTIONS", wordCount: wordsPerSection },
-        { name: "CONCLUSION", wordCount: Math.round(targetWordCount * 0.04) }
+        { name: "CHAPTER 9: FUTURE DIRECTIONS", wordCount: lastBodySectionWords },
+        { name: "CONCLUSION", wordCount: conclusionWords }
       ];
     } else {
       // Standard structure for smaller documents
